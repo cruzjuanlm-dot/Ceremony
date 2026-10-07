@@ -602,7 +602,8 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
           title: `${v.name} — ${b.stage === "booked" ? "service agreement" : "quote"}`,
           status: b.stage === "booked" ? "signed" : "sent",
           amount: b.amount,
-          updatedAt: iso(day(Math.max((BOOK_LEAD[cat] ?? 200) - 30, 20))),
+          // Signed when booked — never a date that hasn't happened yet.
+          updatedAt: iso(new Date(Math.min(day(Math.max((BOOK_LEAD[cat] ?? 200) - 30, 20)).getTime(), today.getTime()))),
           url: "https://drive.example.com/contract",
           notes: "",
         });
@@ -614,9 +615,10 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
         weddingId: w.id,
         vendorId: null,
         clientId,
-        kind: "contract",
-        title: `Planning agreement — ${w.title}`,
-        status: "signed",
+        // Only a booked couple has signed; a proposal-stage couple has a proposal out.
+        kind: spec.client.status === "proposal" ? "proposal" : "contract",
+        title: `${spec.client.status === "proposal" ? "Planning proposal" : "Planning agreement"} — ${w.title}`,
+        status: spec.client.status === "proposal" ? "sent" : "signed",
         amount: spec.client.planningFee,
         updatedAt: iso(created),
         url: "https://drive.example.com/planning-agreement",
@@ -699,7 +701,7 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
 function addEmails(d: Dataset, today: Date, plan: Plan) {
   const ws = d.workspace;
   const vendorById = new Map(d.tables.vendors.map((v) => [v.id, v]));
-  const ago = (hours: number) => new Date(today.getTime() + 9 * 3600000 - hours * 3600000).toISOString();
+  const ago = (hours: number) => new Date(today.getTime() - hours * 3600000).toISOString();
   let n = 0;
   const push = (e: Omit<Email, "id">) => d.tables.emails.push({ ...e, id: `eml_${(++n).toString(36)}` });
 
