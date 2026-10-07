@@ -512,7 +512,8 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
         weddingId: w.id,
         title: c.title,
         dueDate: iso(due),
-        done: daysOut < 0 || (isPast(due) && rand() > 0.12),
+        // Recently-due tasks are sometimes still open; anything a month stale has been closed.
+        done: daysOut < 0 || (isPast(due) && (due.getTime() < today.getTime() - 30 * 86400000 || rand() > 0.35)),
         owner: plan === "diy" && c.owner === "planner" ? "couple" : c.owner,
         phase: c.phase,
       });

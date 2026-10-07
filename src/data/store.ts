@@ -13,7 +13,7 @@ import type { Dataset, Plan, TableName, Tables, Workspace } from "./types";
  * in-memory copy rather than crashing.
  */
 
-const VERSION = 1;
+const VERSION = 2;
 const PLAN_KEY = "ceremony-demo:plan";
 const dataKey = (plan: Plan) => `ceremony-demo:v${VERSION}:${plan}`;
 
