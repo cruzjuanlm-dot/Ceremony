@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "cd .. && bun install --frozen-lockfile",
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ../src/components/ui ../src/lib/utils.ts ../src/hooks ../src/styles.css ../src/components/page-header.tsx ../src/components/cell-control-classes.ts ../bun.lock",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}

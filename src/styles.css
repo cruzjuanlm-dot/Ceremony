@@ -1,0 +1,24 @@
+/*
+ * Ceremony inherits Libretto's ENTIRE design system — tokens, elevation, motion, print rules
+ * — by importing its stylesheet, then rebrands through Libretto's single knob
+ * (--accent-brand). Never copy Libretto's tokens in here: overriding is what keeps UI work on
+ * Libretto flowing into Ceremony automatically.
+ */
+@import "../../src/styles.css";
+@source "./";
+
+@theme inline {
+  /* Display serif for the wordmark and couple names only — body copy stays Libretto's sans. */
+  --font-display: "Cormorant Garamond", ui-serif, Georgia, serif;
+}
+
+:root {
+  /* Champagne-bronze. Deliberately NOT blue/green/red/violet — those carry fixed money
+     meanings in Libretto's design language (§6) and Ceremony keeps them. */
+  --accent-brand: oklch(0.52 0.085 60);
+  --accent-brand-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.965 0.018 70);
+  --sidebar: oklch(0.985 0.006 75);
+  --sidebar-accent: oklch(0.95 0.02 70);
+  --background: oklch(0.995 0.002 75);
+}
