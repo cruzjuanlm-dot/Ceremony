@@ -1,0 +1,345 @@
+import { useState, type FormEvent } from "react";
+import { ChevronRight, Plus, Star } from "lucide-react";
+
+import { Button } from "@libretto-ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@libretto-ui/dialog";
+import { Input } from "@libretto-ui/input";
+import { Label } from "@libretto-ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@libretto-ui/select";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow, TableShell } from "@libretto-ui/table";
+
+import { EmptyState } from "~/components/kit";
+import { StageChip } from "~/components/status";
+import { useInsert, useRows, useUpdate, useWeddingRows } from "~/data/hooks";
+import type { Booking, BookingStage, BudgetLine, Payment, Vendor, Wedding } from "~/data/types";
+import { bookingBalance } from "~/lib/finance";
+import { money, pct, time12 } from "~/lib/format";
+import { STAGES, STAGE_LABEL, VENDOR_CATEGORY_LABEL } from "~/lib/wedding";
+import { cn } from "~/shared/libretto";
+
+import { CellAmount, CellText, GhostSelect } from "./fields";
+import { suggestedTips } from "~/lib/finance";
+import { parseAmount, VENDOR_BUDGET_CATEGORY } from "./wedding-helpers";
+
+const BOARD: BookingStage[] = ["researching", "contacted", "quoted", "booked"];
+const STAGE_OPTIONS = STAGES.map((s) => ({ value: s, label: STAGE_LABEL[s] }));
+
+export function VendorsTab({ wedding: w }: { wedding: Wedding }) {
+  const bookings = useWeddingRows("bookings", w.id);
+  const payments = useWeddingRows("payments", w.id);
+  const lines = useWeddingRows("budgetLines", w.id);
+  const vendors = useRows("vendors");
+  const [showDeclined, setShowDeclined] = useState(false);
+
+  const vendorOf = (b: Booking) => vendors.find((v) => v.id === b.vendorId);
+  const declined = bookings.filter((b) => b.stage === "declined");
+  const tips = suggestedTips(bookings, vendors);
+
+  return (
+    <div className="grid grid-cols-1 gap-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold">
+          Vendor team{" "}
+          <span className="font-normal text-muted-foreground">
+            · {bookings.filter((b) => b.stage === "booked").length} of {bookings.length - declined.length} booked
+          </span>
+        </h2>
+        <AddVendorButton wedding={w} vendors={vendors} bookings={bookings} />
+      </div>
+
+      {bookings.length === 0 ? (
+        <EmptyState title="No vendors yet" action={<AddVendorButton wedding={w} vendors={vendors} bookings={bookings} />}>
+          Add the venue first — most other vendors work around its date.
+        </EmptyState>
+      ) : (
+        <div className="grid grid-cols-1 gap-6">
+          {BOARD.filter((stage) => bookings.some((b) => b.stage === stage)).map((stage) => (
+            <section key={stage} aria-label={STAGE_LABEL[stage]}>
+              <div className="mb-2 flex items-center gap-2">
+                <StageChip stage={stage} />
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {bookings.filter((b) => b.stage === stage).length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {bookings
+                  .filter((b) => b.stage === stage)
+                  .map((b) => {
+                    const v = vendorOf(b);
+                    return v ? (
+                      <BookingCard key={b.id} booking={b} vendor={v} payments={payments} lines={lines} wedding={w} />
+                    ) : null;
+                  })}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+
+      {declined.length > 0 && (
+        <section>
+          <button
+            type="button"
+            aria-expanded={showDeclined}
+            onClick={() => setShowDeclined((s) => !s)}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ChevronRight className={cn("h-4 w-4 transition-transform", showDeclined && "rotate-90")} />
+            Declined ({declined.length})
+          </button>
+          {showDeclined && (
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {declined.map((b) => {
+                const v = vendorOf(b);
+                return v ? <BookingCard key={b.id} booking={b} vendor={v} payments={payments} lines={lines} wedding={w} /> : null;
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {tips.rows.length > 0 && (
+        <TableShell
+          header={
+            <>
+              <h2 className="text-sm font-semibold">Tip envelopes</h2>
+              <span className="text-xs text-muted-foreground">Week of</span>
+            </>
+          }
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Vendor</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead numeric>Contract</TableHead>
+                <TableHead numeric>Suggested</TableHead>
+                <TableHead numeric>Tip</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tips.rows.map((r) => (
+                <TableRow key={r.booking.id}>
+                  <TableCell className="font-medium">{r.vendor.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{VENDOR_CATEGORY_LABEL[r.vendor.category]}</TableCell>
+                  <TableCell numeric>{money(r.booking.amount)}</TableCell>
+                  <TableCell numeric className="text-muted-foreground">{pct(r.pct)}</TableCell>
+                  <TableCell numeric>{money(r.tip)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={4}>Total</TableCell>
+                <TableCell numeric>{money(tips.total)}</TableCell>
+              </TableRow>
+            </TableFooter>
+          </Table>
+        </TableShell>
+      )}
+    </div>
+  );
+}
+
+function BookingCard({
+  booking: b,
+  vendor: v,
+  payments,
+  lines,
+  wedding: w,
+}: {
+  booking: Booking;
+  vendor: Vendor;
+  payments: Payment[];
+  lines: BudgetLine[];
+  wedding: Wedding;
+}) {
+  const update = useUpdate("bookings");
+  const insertLine = useInsert("budgetLines");
+  const save = (patch: Partial<Booking>) => update.mutate({ id: b.id, patch });
+  const bal = bookingBalance(b, payments);
+  const isBooked = b.stage === "booked";
+  const linked = lines.some((l) => l.bookingId === b.id);
+
+  return (
+    <article className={cn("rounded-lg border bg-card p-3 text-sm", b.stage === "declined" && "opacity-70")}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1 truncate font-medium">
+            {v.name}
+            {v.preferred && <Star className="h-3 w-3 shrink-0 fill-current text-amber-500" aria-label="Preferred vendor" />}
+          </div>
+          <div className="text-xs text-muted-foreground">{VENDOR_CATEGORY_LABEL[v.category]}</div>
+        </div>
+      </div>
+
+      <dl className="mt-2 grid grid-cols-[auto_1fr] items-center gap-x-3 text-xs">
+        <dt className="text-muted-foreground">{isBooked ? "Contract" : "Quote"}</dt>
+        <dd>
+          <CellAmount
+            ariaLabel={`${v.name} amount`}
+            value={b.amount}
+            onCommit={(n) => save({ amount: n })}
+            className="h-7 text-xs"
+          />
+        </dd>
+        {isBooked && (
+          <>
+            <dt className="text-muted-foreground">Arrives</dt>
+            <dd>
+              <CellText
+                type="time"
+                ariaLabel={`${v.name} arrival time`}
+                value={b.arrivalTime ?? ""}
+                display={time12(b.arrivalTime)}
+                onCommit={(t) => save({ arrivalTime: t || null })}
+                className="h-7 text-right text-xs"
+              />
+            </dd>
+            <dt className="text-muted-foreground">Balance</dt>
+            <dd className="px-2 py-1 text-right tabular-nums">
+              {b.amount == null ? (
+                "—"
+              ) : bal.balance <= 0 ? (
+                <span className="text-emerald-600 dark:text-emerald-400">Paid in full</span>
+              ) : (
+                <>
+                  {money(bal.balance)}
+                  {bal.paid > 0 && <span className="text-muted-foreground"> · {money(bal.paid)} paid</span>}
+                </>
+              )}
+            </dd>
+          </>
+        )}
+      </dl>
+
+      <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-2">
+        <GhostSelect
+          ariaLabel={`${v.name} stage`}
+          value={b.stage}
+          options={STAGE_OPTIONS}
+          onChange={(s) => save({ stage: s })}
+          className="-ml-2 w-32 [&_select]:h-7 [&_select]:text-xs"
+        />
+        {isBooked && !linked && b.amount != null && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            disabled={insertLine.isPending}
+            onClick={() =>
+              insertLine.mutate({
+                weddingId: w.id,
+                category: VENDOR_BUDGET_CATEGORY[v.category],
+                description: v.name,
+                estimate: b.amount,
+                actual: b.amount,
+                bookingId: b.id,
+                paidBy: "couple",
+              })
+            }
+          >
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            Add to budget
+          </Button>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function AddVendorButton({ wedding: w, vendors, bookings }: { wedding: Wedding; vendors: Vendor[]; bookings: Booking[] }) {
+  const [open, setOpen] = useState(false);
+  const insert = useInsert("bookings");
+  const [vendorId, setVendorId] = useState("");
+  const [stage, setStage] = useState<BookingStage>("contacted");
+  const [amount, setAmount] = useState("");
+
+  const taken = new Set(bookings.map((b) => b.vendorId));
+  const available = vendors
+    .filter((v) => !taken.has(v.id))
+    .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!vendorId) return;
+    await insert.mutateAsync({
+      weddingId: w.id,
+      vendorId,
+      stage,
+      amount: parseAmount(amount),
+      arrivalTime: null,
+      notes: "",
+    });
+    setOpen(false);
+    setVendorId("");
+    setAmount("");
+    setStage("contacted");
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm">
+          <Plus className="mr-1.5 h-4 w-4" />
+          Add vendor
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add vendor</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={submit} className="grid grid-cols-1 gap-4">
+          <div className="grid gap-1.5">
+            <Label>Vendor</Label>
+            <Select value={vendorId} onValueChange={setVendorId}>
+              <SelectTrigger aria-label="Vendor">
+                <SelectValue placeholder={available.length ? "Choose from your directory" : "Every vendor is already on this wedding"} />
+              </SelectTrigger>
+              <SelectContent>
+                {available.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.name} · {VENDOR_CATEGORY_LABEL[v.category]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label>Stage</Label>
+              <Select value={stage} onValueChange={(s) => setStage(s as BookingStage)}>
+                <SelectTrigger aria-label="Stage">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STAGES.filter((s) => s !== "declined").map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {STAGE_LABEL[s]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="av-amount">Quoted amount</Label>
+              <Input id="av-amount" inputMode="decimal" placeholder="$" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={!vendorId || insert.isPending}>
+              Add vendor
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

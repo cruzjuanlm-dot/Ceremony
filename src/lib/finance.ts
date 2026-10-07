@@ -1,4 +1,4 @@
-import type { BudgetLine, Booking, Guest, Payment } from "~/data/types";
+import type { BudgetLine, Booking, Guest, Payment, Vendor } from "~/data/types";
 
 /**
  * Ceremony's money math — the ONE place it lives (same rule as Libretto's finance.ts).
@@ -113,6 +113,27 @@ export const SUGGESTED_TIP_PCT: Partial<Record<string, number>> = {
   photography: 0.05,
   videography: 0.05,
 };
+
+/**
+ * Estimate − projected: positive = under the estimate, negative = over. Lines without an
+ * actual have no variance yet (projected falls back to the estimate).
+ */
+export const lineVariance = (l: BudgetLine): number | null =>
+  l.actual == null ? null : (l.estimate ?? 0) - lineProjected(l);
+
+/** Suggested gratuity per booked vendor (SUGGESTED_TIP_PCT), rounded to $5. */
+export function suggestedTips(bookings: Booking[], vendors: Vendor[]) {
+  const rows: { booking: Booking; vendor: Vendor; pct: number; tip: number }[] = [];
+  for (const b of bookings) {
+    if (b.stage !== "booked" || !b.amount) continue;
+    const vendor = vendors.find((v) => v.id === b.vendorId);
+    const pct = vendor ? SUGGESTED_TIP_PCT[vendor.category] : undefined;
+    if (!vendor || !pct) continue;
+    rows.push({ booking: b, vendor, pct, tip: Math.round((b.amount * pct) / 5) * 5 });
+  }
+  const total = rows.reduce((s, r) => s + r.tip, 0);
+  return { rows, total };
+}
 
 /* ---------- guests ------------------------------------------------------------------- */
 
