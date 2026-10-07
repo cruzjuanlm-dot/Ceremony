@@ -462,7 +462,11 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
       const schedule = (PAYMENT_PLAN[cat] ?? DEFAULT_PLAN).map(
         ([label, share, when]) => [label, share, when === "signing" ? bookedOn : day(when)] as const,
       );
-      for (const [label, pct, due] of schedule) {
+      let scheduled = 0;
+      for (const [i, [label, pct, due]] of schedule.entries()) {
+        // The last installment takes the exact remainder, so rounding never over/underpays.
+        const share = i === schedule.length - 1 ? amount - scheduled : round50(amount * pct);
+        scheduled += share;
         // One deliberately overdue payment per near-term wedding, so the Financials
         // "overdue" state has something real to show.
         const overdue = label === "Second payment" && cat === "florals" && daysOut < 50 && daysOut > 0;
@@ -472,7 +476,7 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
           direction: "outgoing",
           bookingId: b.id,
           label,
-          amount: round50(amount * pct),
+          amount: share,
           dueDate: iso(due),
           paidDate: isPast(due) && !overdue ? iso(due) : null,
           method: isPast(due) && !overdue ? (rand() > 0.5 ? "ACH" : "Check") : null,
