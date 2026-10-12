@@ -4,7 +4,7 @@
   "installCommand": "cd .. && bun install --frozen-lockfile",
   "buildCommand": "vite build",
   "outputDirectory": "dist",
-  "ignoreCommand": "[ -n \"$VERCEL_GIT_PREVIOUS_SHA\" ] && git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- . ../src/components/ui ../src/lib/utils.ts ../src/hooks ../src/styles.css ../src/components/page-header.tsx ../src/components/cell-control-classes.ts ../bun.lock",
+  "ignoreCommand": "[ \"$VERCEL_ENV\" != production ] && [ -n \"$VERCEL_GIT_PREVIOUS_SHA\" ] && git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- . ../src/components/ui ../src/lib/utils.ts ../src/hooks ../src/styles.css ../src/components/page-header.tsx ../src/components/cell-control-classes.ts ../bun.lock",
   "rewrites": [
     {
       "source": "/(.*)",
