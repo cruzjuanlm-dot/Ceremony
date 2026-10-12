@@ -1,10 +1,10 @@
 /*
  * Ceremony inherits Libretto's ENTIRE design system — tokens, elevation, motion, print rules
- * — by importing its stylesheet, then rebrands through Libretto's single knob
- * (--accent-brand). Never copy Libretto's tokens in here: overriding is what keeps UI work on
- * Libretto flowing into Ceremony automatically.
+ * — by importing the vendored copy of its stylesheet (src/libretto/styles.css), then rebrands
+ * through Libretto's single knob (--accent-brand). Override here; don't edit the vendored
+ * tokens, so a future re-sync from Libretto stays a straight copy.
  */
-@import "../../src/styles.css";
+@import "./libretto/styles.css";
 @source "./";
 
 @theme inline {

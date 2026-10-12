@@ -6,17 +6,16 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 /**
- * Ceremony is a plain Vite SPA (demo mode — no server, no Supabase yet) that lives inside the
- * Libretto repo and borrows Libretto's design layer. See ceremony/CLAUDE.md "The doorway".
+ * Ceremony is a plain Vite SPA (demo mode — no server, no Supabase yet).
  *
- *  - `~/`            → ceremony/src (Ceremony's own code)
- *  - `@libretto-ui/` → ../src/components/ui (Libretto's shadcn primitives — the shared layer)
- *  - `@/`            → ../src — exists ONLY so the borrowed primitives can resolve their own
+ *  - `~/`            → src (Ceremony's own code)
+ *  - `@libretto-ui/` → src/libretto/components/ui (the shadcn primitives vendored from Libretto)
+ *  - `@/`            → src/libretto — exists ONLY so the vendored primitives can resolve their own
  *                      internal imports (`@/lib/utils`, `@/hooks/use-mobile`). Ceremony code
  *                      must not import `@/` outside src/shared/ (lint-enforced).
  *
- * Dependencies resolve from the repo-root node_modules (Ceremony declares none of its own),
- * which guarantees ONE copy of React/Radix/Tailwind across both apps' components.
+ * src/libretto/ is a COPY of Libretto's design layer, taken when Ceremony moved out of the
+ * Libretto repo (2026-10-12). It no longer updates itself — see CLAUDE.md "The doorway".
  */
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
@@ -29,8 +28,8 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: /^~\//, replacement: here("./src/") },
-      { find: /^@libretto-ui\//, replacement: here("../src/components/ui/") },
-      { find: /^@\//, replacement: here("../src/") },
+      { find: /^@libretto-ui\//, replacement: here("./src/libretto/components/ui/") },
+      { find: /^@\//, replacement: here("./src/libretto/") },
     ],
     dedupe: ["react", "react-dom", "@tanstack/react-router", "@tanstack/react-query"],
   },

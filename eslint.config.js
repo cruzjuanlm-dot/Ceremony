@@ -4,7 +4,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "src/routeTree.gen.ts"] },
+  { ignores: ["dist", "src/routeTree.gen.ts", "src/libretto"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -13,14 +13,14 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       "@typescript-eslint/no-unused-vars": "off",
-      // The doorway rule (ceremony/CLAUDE.md): Ceremony may borrow Libretto's design layer
-      // via `@libretto-ui/*` and src/shared/ only. Never Libretto's domain code.
+      // The doorway rule (CLAUDE.md): Ceremony uses the vendored Libretto design layer
+      // via `@libretto-ui/*` and src/shared/ only.
       "no-restricted-imports": [
         "error",
         {
           patterns: [
             {
-              group: ["@/*", "../../src/*", "../../../src/*"],
+              group: ["@/*"],
               message:
                 "Import Libretto code only through @libretto-ui/* or ~/shared/libretto (the doorway).",
             },
@@ -30,7 +30,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/shared/**"],
+    files: ["src/shared/**", "src/libretto/**"],
     rules: { "no-restricted-imports": "off" },
   },
 );

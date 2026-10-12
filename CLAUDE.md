@@ -1,9 +1,10 @@
 # CLAUDE.md — Ceremony
 
-Ceremony is the wedding-planning spin-off of Libretto. It lives in `ceremony/` inside the
-Libretto repo (option D, owner decision 2026-10-07) and **borrows Libretto's design layer** so
-UI work on Libretto flows into Ceremony automatically. Read the repo-root `CLAUDE.md` and
-`docs/engineering/DESIGN_LANGUAGE.md` too — Ceremony follows the same design language.
+Ceremony is the wedding-planning spin-off of Libretto. It started in `ceremony/` inside the
+Libretto repo (2026-10-07) and was **split into its own repo on 2026-10-12** (owner decision:
+sharing a repo made every Libretto push trigger a failing Ceremony build on Vercel). It keeps a
+**vendored copy of Libretto's design layer** in `src/libretto/`. Read `docs/DESIGN_LANGUAGE.md`
+(copied from Libretto) — Ceremony follows the same design language.
 
 ## Product shape
 
@@ -15,7 +16,7 @@ and features show. Never fork a screen per plan — branch inside it.
 Navigation is the owner's sketch: Dashboard · Weddings · Clients (Pro) · Vendors · Financials ·
 Calendar & planner · Email log · Contracts & docs · Design studio (placeholder) · Settings.
 
-Research behind the product: `ceremony/docs/WEDDING_INDUSTRY_RESEARCH.md`.
+Research behind the product: `docs/WEDDING_INDUSTRY_RESEARCH.md`.
 
 ## Demo mode (current state)
 
@@ -28,30 +29,28 @@ dataset per plan), seeded from `src/data/seed.ts` with dates **relative to today
 - `store.ts` is Supabase-shaped on purpose. Going live = replacing that one file with
   `supabase.from(table)` calls + the tables in `src/data/types.ts`. Nothing else should change.
 
-## The doorway — how Ceremony shares Libretto's UI (and how not to)
+## The doorway — Ceremony's copy of Libretto's UI
 
 | Import | Resolves to | Allowed? |
 |---|---|---|
-| `~/…` | `ceremony/src/…` | Ceremony's own code |
-| `@libretto-ui/<name>` | `src/components/ui/<name>` | Yes — Libretto's shadcn primitives |
+| `~/…` | `src/…` | Ceremony's own code |
+| `@libretto-ui/<name>` | `src/libretto/components/ui/<name>` | Yes — the vendored shadcn primitives |
 | `~/shared/libretto` | re-exports `cn`, `PageHeader`, `BackButton`, cell-control classes | Yes |
-| `@/…` | Libretto's `src/` | **Only inside `src/shared/`** (lint-enforced) |
+| `@/…` | `src/libretto/…` | **Only inside `src/shared/` and `src/libretto/`** (lint-enforced) |
 
 Rules:
-1. Ceremony may import Libretto's **design layer** only. Never Libretto's domain code
-   (`finance.ts`, Supabase clients, Libretto pages, Libretto's sidebar content).
-2. **Libretto must never import from `ceremony/`.** The dependency is one-way.
-3. Theme: `src/styles.css` imports Libretto's stylesheet and overrides only `--accent-brand`
-   (+ a few surface tints) and adds `--font-display`. Never copy Libretto tokens here.
-4. Ceremony declares no dependencies of its own; it uses the repo-root `node_modules` (one
-   React, one Radix, one Tailwind for both apps). If Ceremony ever needs a package Libretto
-   doesn't have, add it to the ROOT package.json in its own commit and say why.
-5. Splitting into its own repo later = vendor/package `src/components/ui` + the files
-   re-exported by `src/shared/libretto.ts`, then point the aliases at the copy. That is the
-   whole seam; keep it that way.
-
-A Libretto UI change can break Ceremony's build (never the reverse). After pulling Libretto
-changes, run Ceremony's checks.
+1. `src/libretto/` is a **copy** of Libretto's design layer as of the split (from the
+   `ceremony` branch of `cruzjuanlm-dot/event-production-system`, commit `d728409`). It does
+   NOT update itself. Treat it as vendored: don't edit it for Ceremony-only needs — override in
+   `src/styles.css` or wrap in `src/components/` — so a re-sync stays a straight copy.
+2. **Re-syncing from Libretto** = copy the same paths from Libretto's `src/` over
+   `src/libretto/` (`components/ui/*` that exist here, `components/page-header.tsx`,
+   `components/cell-control-classes.ts`, `hooks/use-mobile.tsx`, `lib/utils.ts`, `styles.css`
+   — then change its `@source "../src"` line back to `@source "./"`), add any new packages
+   they need, and run the checks below.
+3. Theme: `src/styles.css` imports `src/libretto/styles.css` and overrides only
+   `--accent-brand` (+ a few surface tints) and adds `--font-display`.
+4. Never pull Libretto **domain** code in (`finance.ts`, Supabase clients, Libretto pages).
 
 ## Domain rules
 
@@ -75,18 +74,19 @@ changes, run Ceremony's checks.
 DESIGN_LANGUAGE §6: green = paid/booked/good, red = overdue/over/bad, amber = due soon/pending,
 blue = budgeted/expected, brand = Ceremony accent.
 
-## Commands (run from `ceremony/`)
+## Commands
 
 ```
-../node_modules/.bin/vite              # dev server, http://localhost:8081
-../node_modules/.bin/tsc --noEmit -p . # typecheck
-../node_modules/.bin/eslint .          # lint (includes the doorway rule)
-../node_modules/.bin/vite build        # production build → dist/
+bun install          # once
+bun run dev          # dev server, http://localhost:8081
+bun run typecheck    # tsc --noEmit
+bun run lint         # eslint (includes the doorway rule)
+bun run build        # production build → dist/
 ```
-(`bun install` at the repo root first. `bun run dev` etc. also work from `ceremony/`.)
 
 ## Deploy
 
-Vercel project `ceremony` (team `even-tech`), Root Directory `ceremony`, settings from
-`ceremony/vercel.json`: installs at the repo root, builds with Vite, SPA rewrite, and an
-ignored-build step that skips deploys unless `ceremony/` or the shared Libretto UI files changed.
+Vercel project `ceremony` (team `even-tech`), connected to this repo, Root Directory blank,
+production branch `main`. Settings from `vercel.json`: `bun install`, Vite build, SPA rewrite.
+Production URL: https://ceremony-iota.vercel.app (public; preview deployments need a Vercel
+login).

@@ -15,8 +15,8 @@
     "baseUrl": ".",
     "paths": {
       "~/*": ["./src/*"],
-      "@libretto-ui/*": ["../src/components/ui/*"],
-      "@/*": ["../src/*"]
+      "@libretto-ui/*": ["./src/libretto/components/ui/*"],
+      "@/*": ["./src/libretto/*"]
     }
   }
 }

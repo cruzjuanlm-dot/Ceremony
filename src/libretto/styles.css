@@ -1,0 +1,251 @@
+@import "tailwindcss" source(none);
+@source "./";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design system.
+ *
+ * Rebrand the app in one place by changing --accent-brand below.
+ * All buttons, focus rings and highlights derive from it.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif;
+}
+
+:root {
+  --radius: 0.625rem;
+
+  /* Layered elevation — soft, tinted shadows read as "lifted" without hard borders.
+     Tint carries a trace of the neutral hue (260) so shadows feel considered, not grey. */
+  --shadow-xs: 0 1px 2px oklch(0.2 0.03 260 / 0.04);
+  --shadow-sm: 0 1px 3px oklch(0.2 0.03 260 / 0.06), 0 1px 2px oklch(0.2 0.03 260 / 0.04);
+  --shadow-md:
+    0 2px 6px oklch(0.2 0.03 260 / 0.06), 0 4px 12px oklch(0.2 0.03 260 / 0.05);
+  --shadow-lg:
+    0 4px 12px oklch(0.2 0.03 260 / 0.08), 0 12px 28px oklch(0.2 0.03 260 / 0.08);
+
+  /* Single rebrand knob — change this to re-color the entire app. */
+  --accent-brand: oklch(0.58 0.17 250);
+  --accent-brand-foreground: oklch(0.99 0 0);
+
+  --background: oklch(0.995 0 0);
+  --foreground: oklch(0.17 0.02 260);
+
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+
+  --primary: var(--accent-brand);
+  --primary-foreground: var(--accent-brand-foreground);
+
+  --secondary: oklch(0.965 0.005 260);
+  --secondary-foreground: oklch(0.22 0.03 260);
+
+  --muted: oklch(0.965 0.005 260);
+  --muted-foreground: oklch(0.5 0.02 260);
+
+  --accent: oklch(0.955 0.015 250);
+  --accent-foreground: var(--accent-brand);
+
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  --border: oklch(0.92 0.005 260);
+  --input: oklch(0.92 0.005 260);
+  --ring: var(--accent-brand);
+
+  --chart-1: var(--accent-brand);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+
+  --sidebar: oklch(0.985 0.003 260);
+  --sidebar-foreground: oklch(0.22 0.02 260);
+  --sidebar-primary: var(--accent-brand);
+  --sidebar-primary-foreground: var(--accent-brand-foreground);
+  --sidebar-accent: oklch(0.94 0.01 250);
+  --sidebar-accent-foreground: var(--accent-brand);
+  --sidebar-border: oklch(0.92 0.005 260);
+  --sidebar-ring: var(--accent-brand);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Money and metrics line up in columns — tabular figures stop them from jittering. */
+  .tabular-nums,
+  [data-money] {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/*
+ * Motion + elevation primitives.
+ *
+ * Everything here animates only opacity/transform (GPU-composited, no layout/paint) or
+ * box-shadow on hover — no animation libraries, no per-frame JS. All of it is disabled
+ * under prefers-reduced-motion, so it is perf-neutral by construction.
+ */
+@layer utilities {
+  /* Soft elevation, opt-in — used in place of hard 1px borders on cards/panels. */
+  .elevate {
+    box-shadow: var(--shadow-sm);
+  }
+  .elevate-md {
+    box-shadow: var(--shadow-md);
+  }
+
+  /* Interactive surfaces lift a hair on hover — the cue that something is clickable. */
+  .hover-lift {
+    transition:
+      box-shadow 160ms ease,
+      transform 160ms ease;
+    will-change: transform;
+  }
+  .hover-lift:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  /* Content settling in — a short, calm rise. Used on cards/panels as they mount. */
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .fade-up {
+    animation: fade-up 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .fade-in {
+    animation: fade-in 240ms ease both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .hover-lift:hover {
+    transform: none;
+  }
+}
+
+@media print {
+  @page {
+    margin: 0.5in;
+  }
+  body {
+    background: white !important;
+  }
+  .no-print,
+  aside,
+  nav,
+  header[data-app-header],
+  [data-sidebar],
+  [data-slot="sidebar"] {
+    display: none !important;
+  }
+  .print-sheet {
+    box-shadow: none !important;
+    border: none !important;
+  }
+  /* Tab panels are hidden on screen but every one belongs in the budget PDF. Radix keeps
+     them mounted via forceMount; this is what makes the inactive panel visible in print.
+     !important is required to beat the utility class that hides it on screen. */
+  .print-show {
+    display: block !important;
+  }
+  .print-show + .print-show {
+    margin-top: 1.5rem;
+  }
+  /* The PDF is a document, not a form: editable cells print as their values, dropdowns as
+     their selected text. Without this every numeric cell renders as an empty box. */
+  input,
+  select {
+    border: 0 !important;
+    background: transparent !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    appearance: none;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tr {
+    break-inside: avoid;
+  }
+}
