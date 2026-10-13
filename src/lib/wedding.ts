@@ -6,6 +6,9 @@ import type {
   DocumentKind,
   DocumentStatus,
   MealChoice,
+  QuoteItemKey,
+  QuoteItemState,
+  QuoteLineKind,
   ServiceLevel,
   TimelineSegment,
   VendorCategory,
@@ -152,4 +155,36 @@ export const DOC_STATUS_LABEL: Record<DocumentStatus, string> = {
   paid: "Paid",
   expired: "Expired",
   filed: "Filed",
+};
+
+export const QUOTE_ITEM_LABEL: Record<QuoteItemKey, string> = {
+  ceremony_site: "Ceremony site",
+  catering: "Food & catering",
+  bar: "Bar & drinks",
+  staff: "Servers & bartenders",
+  tables_chairs: "Tables & chairs",
+  linens: "Linens",
+  tableware: "Plates, glassware & flatware",
+  cake_cutting: "Cake cutting",
+  coordinator: "Venue coordinator",
+  setup_cleanup: "Setup & cleanup",
+  security: "Security",
+  parking: "Parking or valet",
+  lighting: "Lighting",
+  sound: "Sound system & mics",
+  getting_ready: "Getting-ready suite",
+  rain_plan: "Rain plan / tent",
+  insurance: "Event insurance",
+};
+
+export const QUOTE_ITEM_STATE_LABEL: Record<QuoteItemState, string> = {
+  included: "Included",
+  not_included: "Not included",
+  unknown: "Not asked",
+};
+
+export const QUOTE_LINE_KIND_LABEL: Record<QuoteLineKind, string> = {
+  rental: "Venue rental",
+  food_bev: "Food & drink",
+  fee: "Fee",
 };

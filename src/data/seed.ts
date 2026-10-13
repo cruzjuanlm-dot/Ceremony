@@ -20,6 +20,7 @@ import type {
   TimelineItem,
   Vendor,
   VendorCategory,
+  VenueQuote,
   Wedding,
 } from "./types";
 
@@ -358,6 +359,7 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
     appointments: [],
     emails: [],
     documents: [],
+    venueQuotes: [],
   };
 
   for (const spec of specs) {
@@ -787,6 +789,127 @@ function addEmails(d: Dataset, today: Date, plan: Plan) {
   }
 }
 
+/* ---------- venue quotes ------------------------------------------------------------- */
+
+type QuoteSeed = Omit<VenueQuote, "id" | "weddingId" | "vendorId" | "venueName" | "lines" | "receivedDate" | "validUntil"> & {
+  receivedDaysAgo: number;
+  lines: [label: string, kind: VenueQuote["lines"][number]["kind"], amount: number, perGuest?: boolean][];
+};
+
+/**
+ * Quotes for a couple still choosing a venue. Pro: the undated beach inquiry gets three
+ * quotes where the cheapest sticker price (the beach club) is NOT the cheapest wedding.
+ * DIY: the two quotes Ana & Luis compared before booking Monte Alto.
+ */
+function addVenueQuotes(d: Dataset, today: Date, plan: Plan) {
+  const vendorId = (name: string) => d.tables.vendors.find((v) => v.name === name)?.id ?? null;
+  const add = (weddingTitle: string, venueName: string, inDirectory: boolean, q: QuoteSeed) => {
+    const w = d.tables.weddings.find((x) => x.title === weddingTitle);
+    if (!w) return;
+    const { receivedDaysAgo, lines, ...rest } = q;
+    d.tables.venueQuotes.push({
+      ...rest,
+      id: id("vq"),
+      weddingId: w.id,
+      vendorId: inDirectory ? vendorId(venueName) : null,
+      venueName,
+      receivedDate: iso(addDays(today, -receivedDaysAgo)),
+      validUntil: iso(addDays(today, 30 - receivedDaysAgo)),
+      lines: lines.map(([label, kind, amount, perGuest = false]) => ({ id: id("ql"), label, kind, amount, perGuest })),
+    });
+  };
+
+  if (plan === "pro") {
+    add("Natalia & Javier", "Hacienda Las Palmas", true, {
+      receivedDaysAgo: 6,
+      hoursIncluded: 6, overtimePerHour: 750, fbMinimum: 20000,
+      serviceChargePct: 21, taxPct: 11.5, taxOnServiceCharge: true,
+      lines: [
+        ["Saturday site fee", "rental", 2500],
+        ["Isla package — dinner + 5-hr open bar", "food_bev", 165, true],
+      ],
+      items: {
+        catering: "included", bar: "included", staff: "included", tables_chairs: "included", linens: "included",
+        tableware: "included", cake_cutting: "included", coordinator: "included", setup_cleanup: "included",
+        security: "included", lighting: "included", getting_ready: "included", rain_plan: "included",
+        sound: "not_included",
+      },
+      gapOverrides: {},
+      notes: "Covered terrace is the rain plan. Package price holds for 30 days.",
+    });
+    add("Natalia & Javier", "Playa Azul Beach Club", false, {
+      receivedDaysAgo: 4,
+      hoursIncluded: 8, overtimePerHour: null, fbMinimum: null,
+      serviceChargePct: null, taxPct: 11.5, taxOnServiceCharge: false,
+      lines: [
+        ["Beach house rental (8 hrs)", "rental", 7500],
+        ["Cleaning fee", "fee", 600],
+      ],
+      items: {
+        getting_ready: "included", parking: "included",
+        catering: "not_included", bar: "not_included", staff: "not_included", tables_chairs: "not_included",
+        linens: "not_included", tableware: "not_included", cake_cutting: "not_included", coordinator: "not_included",
+        setup_cleanup: "not_included", security: "not_included", lighting: "not_included", sound: "not_included",
+        rain_plan: "not_included", insurance: "not_included",
+      },
+      gapOverrides: {},
+      notes: "Bring-your-own-everything. Any licensed caterer. No indoor space — tent is on us.",
+    });
+    add("Natalia & Javier", "Villa Marbella Rincón", true, {
+      receivedDaysAgo: 2,
+      hoursIncluded: 5, overtimePerHour: 500, fbMinimum: null,
+      serviceChargePct: 20, taxPct: 11.5, taxOnServiceCharge: false,
+      lines: [
+        ["Villa rental", "rental", 6000],
+        ["In-house dinner (required caterer)", "food_bev", 95, true],
+        ["Bartender fee", "fee", 400],
+      ],
+      items: {
+        catering: "included", staff: "included", tableware: "included", linens: "included", tables_chairs: "included",
+        setup_cleanup: "included", bar: "not_included", rain_plan: "not_included", security: "not_included",
+        parking: "not_included", lighting: "not_included", sound: "not_included", getting_ready: "not_included",
+        insurance: "not_included",
+      },
+      gapOverrides: { rain_plan: 4500 },
+      notes: "Tent required Jun–Nov through their partner ($4,500). Lawn seats 120.",
+    });
+  } else {
+    add("Ana & Luis", "Hacienda Monte Alto", true, {
+      receivedDaysAgo: 170,
+      hoursIncluded: 7, overtimePerHour: 350, fbMinimum: null,
+      serviceChargePct: null, taxPct: 11.5, taxOnServiceCharge: false,
+      lines: [
+        ["Hacienda rental", "rental", 4800],
+        ["Security (required)", "fee", 350],
+      ],
+      items: {
+        tables_chairs: "included", coordinator: "included", rain_plan: "included", setup_cleanup: "included",
+        parking: "included", getting_ready: "included", security: "included",
+        catering: "not_included", bar: "not_included", staff: "not_included", linens: "not_included",
+        tableware: "not_included", cake_cutting: "not_included", sound: "not_included", insurance: "not_included",
+      },
+      gapOverrides: {},
+      notes: "Coffee barn is the rain plan. Any caterer.",
+    });
+    add("Ana & Luis", "Finca El Cafetal", false, {
+      receivedDaysAgo: 165,
+      hoursIncluded: 5, overtimePerHour: 400, fbMinimum: 14000,
+      serviceChargePct: 18, taxPct: 11.5, taxOnServiceCharge: true,
+      lines: [
+        ["Garden ceremony + reception", "rental", 1500],
+        ["All-inclusive dinner + bar", "food_bev", 118, true],
+      ],
+      items: {
+        catering: "included", bar: "included", staff: "included", tables_chairs: "included", linens: "included",
+        tableware: "included", cake_cutting: "included", coordinator: "included", setup_cleanup: "included",
+        sound: "included", rain_plan: "not_included",
+      },
+      gapOverrides: {},
+      notes: "45 minutes up the mountain from Ponce. Shuttle not included.",
+    });
+  }
+}
+
 /* ---------- datasets ----------------------------------------------------------------- */
 
 function proSpecs(): WeddingSpec[] {
@@ -949,5 +1072,6 @@ export function seedDataset(plan: Plan, today: Date): Dataset {
       ? { plan, name: "Brisa Wedding Co.", ownerName: "Marisol Vega", ownerEmail: "marisol@brisaweddings.example", city: "San Juan, PR" }
       : { plan, name: "Ana & Luis", ownerName: "Ana Rodríguez", ownerEmail: "ana.luis@mail.example", city: "Ponce, PR" };
   addEmails(d, today, plan);
+  addVenueQuotes(d, today, plan);
   return d;
 }

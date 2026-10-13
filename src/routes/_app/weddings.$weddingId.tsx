@@ -10,6 +10,7 @@ import { DocumentsTab } from "~/components/wedding/documents-tab";
 import { GuestsTab } from "~/components/wedding/guests-tab";
 import { LogisticsTab } from "~/components/wedding/logistics-tab";
 import { OverviewTab } from "~/components/wedding/overview-tab";
+import { QuotesTab } from "~/components/wedding/quotes-tab";
 import { TimelineTab } from "~/components/wedding/timeline-tab";
 import { VendorsTab } from "~/components/wedding/vendors-tab";
 import { WeddingHeader } from "~/components/wedding/wedding-header";
@@ -30,6 +31,7 @@ const TAB_LABEL: Record<WeddingTab, string> = {
   guests: "Guests",
   timeline: "Timeline",
   vendors: "Vendors",
+  quotes: "Venue quotes",
   checklist: "Checklist",
   logistics: "Logistics",
   documents: "Documents",
@@ -96,6 +98,9 @@ function WeddingPage() {
         </TabsContent>
         <TabsContent value="vendors" className="mt-5">
           <VendorsTab wedding={wedding} />
+        </TabsContent>
+        <TabsContent value="quotes" className="mt-5">
+          <QuotesTab wedding={wedding} />
         </TabsContent>
         <TabsContent value="checklist" className="mt-5">
           <ChecklistTab wedding={wedding} />

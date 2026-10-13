@@ -1,4 +1,16 @@
-import type { BudgetLine, Booking, Guest, Payment, Vendor } from "~/data/types";
+import type {
+  BudgetLine,
+  Booking,
+  Guest,
+  Payment,
+  QuoteItemKey,
+  QuoteItemState,
+  QuoteLine,
+  Vendor,
+  VenueNeeds,
+  VenueQuote,
+  Wedding,
+} from "~/data/types";
 
 /**
  * Ceremony's money math — the ONE place it lives (same rule as Libretto's finance.ts).
@@ -167,6 +179,238 @@ export function guestSummary(guests: Guest[]): GuestSummary {
 /** Cost per attending guest — the number couples actually ask about. */
 export const costPerGuest = (projected: number, attending: number) =>
   attending > 0 ? projected / attending : null;
+
+/* ---------- venue quotes ------------------------------------------------------------- */
+
+/**
+ * Venues quote different bundles: one is "venue only", another is an all-in package
+ * with a food & beverage minimum, a 22% service charge and tax on top. The sticker
+ * price compares nothing. The REAL price of a quote is:
+ *
+ *   quoted lines (per-guest lines × guests)
+ *   + F&B minimum top-up (if F&B spend falls short of the minimum)
+ *   + service charge (on F&B and the top-up)
+ *   + tax (on everything, service charge included when the venue taxes it)
+ *   + overtime (hours the day needs beyond what's included)
+ *   + what you'd still pay elsewhere for each needed thing the quote doesn't cover
+ *
+ * "Unknown" items (not asked yet) are priced as missing, so a vague quote can't win by
+ * staying vague, and they're listed as questions for the venue.
+ */
+
+export type QuoteItemBasis = "per_guest" | "flat";
+
+/**
+ * What it costs to cover each item OUTSIDE the venue. Rough mid-market starting points
+ * (PR / South Florida, 2026), editable per wedding in "What we need".
+ */
+export const QUOTE_ITEM_DEFAULTS: Record<QuoteItemKey, { basis: QuoteItemBasis; estimate: number }> = {
+  ceremony_site: { basis: "flat", estimate: 2000 },
+  catering: { basis: "per_guest", estimate: 85 },
+  bar: { basis: "per_guest", estimate: 35 },
+  staff: { basis: "per_guest", estimate: 15 },
+  tables_chairs: { basis: "per_guest", estimate: 12 },
+  linens: { basis: "per_guest", estimate: 6 },
+  tableware: { basis: "per_guest", estimate: 8 },
+  cake_cutting: { basis: "per_guest", estimate: 3 },
+  coordinator: { basis: "flat", estimate: 1200 },
+  setup_cleanup: { basis: "flat", estimate: 800 },
+  security: { basis: "flat", estimate: 400 },
+  parking: { basis: "flat", estimate: 1200 },
+  lighting: { basis: "flat", estimate: 1000 },
+  sound: { basis: "flat", estimate: 500 },
+  getting_ready: { basis: "flat", estimate: 500 },
+  rain_plan: { basis: "flat", estimate: 3000 },
+  insurance: { basis: "flat", estimate: 250 },
+};
+
+export const QUOTE_ITEM_KEYS = Object.keys(QUOTE_ITEM_DEFAULTS) as QuoteItemKey[];
+
+export const DEFAULT_VENUE_HOURS = 6;
+
+export interface ResolvedNeed {
+  key: QuoteItemKey;
+  needed: boolean;
+  basis: QuoteItemBasis;
+  /** Per guest or flat, as `basis` says. */
+  estimate: number | null;
+  /** The estimate at the comparison's guest count. Null when no estimate is set. */
+  total: number | null;
+}
+
+/** The wedding's needs with defaults filled in. A church ceremony doesn't need a ceremony site. */
+export function resolveVenueNeeds(
+  w: Pick<Wedding, "venueNeeds" | "ceremonyType">,
+  guests: number,
+): { hoursNeeded: number | null; items: ResolvedNeed[] } {
+  const own = w.venueNeeds;
+  const items = QUOTE_ITEM_KEYS.map((key): ResolvedNeed => {
+    const def = QUOTE_ITEM_DEFAULTS[key];
+    const o = own?.items[key];
+    const needed = o?.needed ?? !(key === "ceremony_site" && w.ceremonyType === "catholic");
+    const estimate = o && "estimate" in o ? (o.estimate ?? null) : def.estimate;
+    const total = estimate == null ? null : def.basis === "per_guest" ? estimate * guests : estimate;
+    return { key, needed, basis: def.basis, estimate, total };
+  });
+  return { hoursNeeded: own ? own.hoursNeeded : DEFAULT_VENUE_HOURS, items };
+}
+
+export const quoteLineTotal = (l: QuoteLine, guests: number): number | null =>
+  l.amount == null ? null : l.perGuest ? l.amount * guests : l.amount;
+
+export interface QuoteGap {
+  key: QuoteItemKey;
+  state: QuoteItemState;
+  /** What covering it elsewhere costs. 0 when included; null when no estimate exists. */
+  cost: number | null;
+}
+
+/** Something to ask the venue before the number can be trusted. */
+export type QuoteQuestion =
+  | { kind: "item"; key: QuoteItemKey }
+  | { kind: "line_amount"; label: string }
+  | { kind: "service_charge" }
+  | { kind: "tax" }
+  | { kind: "hours" }
+  | { kind: "overtime_rate" };
+
+export interface QuoteCost {
+  /** Sum of the quote's lines at the comparison guest count — the sticker price. */
+  subtotal: number;
+  fbSpend: number;
+  minimumTopUp: number;
+  serviceCharge: number;
+  tax: number;
+  /** What the venue will invoice: subtotal + top-up + service + tax. */
+  quoted: number;
+  overtimeHours: number;
+  overtime: number;
+  gaps: QuoteGap[];
+  /** Cost of needed items the quote doesn't cover (unknowns included). */
+  extras: number;
+  /** The part of `extras` that's only there because nobody has asked yet. */
+  unknownExtras: number;
+  /** quoted + overtime + extras — the number to compare. */
+  real: number;
+  perGuest: number | null;
+  questions: QuoteQuestion[];
+  /** False until the quote has at least one priced line. */
+  priced: boolean;
+}
+
+const pctOf = (base: number, p: number | null) => (p == null ? 0 : (base * p) / 100);
+
+export function quoteCost(
+  q: VenueQuote,
+  guests: number,
+  needs: { hoursNeeded: number | null; items: ResolvedNeed[] },
+): QuoteCost {
+  const questions: QuoteQuestion[] = [];
+  let subtotal = 0;
+  let fbSpend = 0;
+  let pricedLines = 0;
+  for (const l of q.lines) {
+    const t = quoteLineTotal(l, guests);
+    if (t == null) {
+      questions.push({ kind: "line_amount", label: l.label || "Unnamed line" });
+      continue;
+    }
+    pricedLines++;
+    subtotal += t;
+    if (l.kind === "food_bev") fbSpend += t;
+  }
+
+  const minimumTopUp = q.fbMinimum != null ? Math.max(0, q.fbMinimum - fbSpend) : 0;
+  const serviceBase = fbSpend + minimumTopUp;
+  if (serviceBase > 0 && q.serviceChargePct == null) questions.push({ kind: "service_charge" });
+  const serviceCharge = pctOf(serviceBase, q.serviceChargePct);
+  if (subtotal > 0 && q.taxPct == null) questions.push({ kind: "tax" });
+  const tax = pctOf(subtotal + minimumTopUp + (q.taxOnServiceCharge ? serviceCharge : 0), q.taxPct);
+  const quoted = subtotal + minimumTopUp + serviceCharge + tax;
+
+  let overtimeHours = 0;
+  let overtime = 0;
+  if (needs.hoursNeeded != null) {
+    if (q.hoursIncluded == null) questions.push({ kind: "hours" });
+    else {
+      overtimeHours = Math.max(0, needs.hoursNeeded - q.hoursIncluded);
+      if (overtimeHours > 0) {
+        if (q.overtimePerHour == null) questions.push({ kind: "overtime_rate" });
+        else overtime = overtimeHours * q.overtimePerHour;
+      }
+    }
+  }
+
+  const gaps: QuoteGap[] = [];
+  let extras = 0;
+  let unknownExtras = 0;
+  for (const n of needs.items) {
+    if (!n.needed) continue;
+    const state = q.items[n.key] ?? "unknown";
+    if (state === "included") {
+      gaps.push({ key: n.key, state, cost: 0 });
+      continue;
+    }
+    const cost = q.gapOverrides[n.key] ?? n.total;
+    gaps.push({ key: n.key, state, cost });
+    extras += cost ?? 0;
+    if (state === "unknown") {
+      unknownExtras += cost ?? 0;
+      questions.push({ kind: "item", key: n.key });
+    }
+  }
+
+  const real = quoted + overtime + extras;
+  return {
+    subtotal,
+    fbSpend,
+    minimumTopUp,
+    serviceCharge,
+    tax,
+    quoted,
+    overtimeHours,
+    overtime,
+    gaps,
+    extras,
+    unknownExtras,
+    real,
+    perGuest: guests > 0 ? real / guests : null,
+    questions,
+    priced: pricedLines > 0,
+  };
+}
+
+export interface RankedQuote {
+  quote: VenueQuote;
+  cost: QuoteCost;
+  /** 1 = best real price. Null for unpriced quotes, which can't be ranked. */
+  rank: number | null;
+  /** real − best real. 0 for the best; null when unranked. */
+  vsBest: number | null;
+}
+
+/** Every quote costed and ranked by real price, cheapest first; unpriced quotes last. */
+export function rankQuotes(
+  quotes: VenueQuote[],
+  guests: number,
+  needs: { hoursNeeded: number | null; items: ResolvedNeed[] },
+): RankedQuote[] {
+  const costed = quotes.map((quote) => ({ quote, cost: quoteCost(quote, guests, needs) }));
+  const priced = costed.filter((c) => c.cost.priced).sort((a, b) => a.cost.real - b.cost.real);
+  const best = priced[0]?.cost.real ?? null;
+  return [
+    ...priced.map((c, i) => ({ ...c, rank: i + 1, vsBest: best == null ? null : c.cost.real - best })),
+    ...costed.filter((c) => !c.cost.priced).map((c) => ({ ...c, rank: null, vsBest: null })),
+  ];
+}
+
+/** The quote with the lowest sticker price (lines only), when it isn't also the best real price. */
+export function stickerTrap(ranked: RankedQuote[]): { trap: RankedQuote; best: RankedQuote } | null {
+  const priced = ranked.filter((r) => r.rank != null);
+  if (priced.length < 2) return null;
+  const cheapestSticker = priced.reduce((a, b) => (b.cost.subtotal < a.cost.subtotal ? b : a));
+  return cheapestSticker.rank === 1 ? null : { trap: cheapestSticker, best: priced[0] };
+}
 
 /* ---------- dates -------------------------------------------------------------------- */
 

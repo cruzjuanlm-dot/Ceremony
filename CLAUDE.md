@@ -62,6 +62,10 @@ Rules:
 - **Blank is not zero** — show "—" for unknown amounts.
 - **Outgoing payments** (to vendors) and **incoming payments** (Pro: the planner's fee from the
   couple) are different businesses' money. Never net them together.
+- **Venue quotes compare on REAL price** (`quoteCost()` / `rankQuotes()` in finance.ts): quoted
+  lines + F&B-minimum top-up + service charge + tax + overtime + the cost of every needed item
+  the quote doesn't cover (the wedding's `venueNeeds`). "Not asked" items are priced as missing
+  and listed as questions — a vague quote must never win by staying vague.
 - **Lifecycle is derived** from the date (`weddingPhase()` in `src/lib/wedding.ts`), never stored.
 - Labels for categories, stages, statuses come from `src/lib/wedding.ts`; status colours from
   `src/components/status.tsx`. One vocabulary.

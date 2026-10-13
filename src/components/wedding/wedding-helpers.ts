@@ -12,6 +12,7 @@ export const WEDDING_TABS = [
   "guests",
   "timeline",
   "vendors",
+  "quotes",
   "checklist",
   "logistics",
   "documents",

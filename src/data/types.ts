@@ -65,7 +65,83 @@ export interface Wedding {
   importantNotes: string;
   /** Rain plan / contingencies. Florida + Puerto Rico weddings are outdoors a lot. */
   rainPlan: string;
+  /**
+   * What this couple needs from a venue — the yardstick every venue quote is measured
+   * against. Absent = the defaults in `resolveVenueNeeds()` (lib/finance.ts).
+   */
+  venueNeeds?: VenueNeeds;
   createdAt: string;
+}
+
+/* ---------- venue quotes ------------------------------------------------------------- */
+
+/** The things a wedding needs that venues bundle differently. Labels: QUOTE_ITEM_LABEL. */
+export type QuoteItemKey =
+  | "ceremony_site"
+  | "catering"
+  | "bar"
+  | "staff"
+  | "tables_chairs"
+  | "linens"
+  | "tableware"
+  | "cake_cutting"
+  | "coordinator"
+  | "setup_cleanup"
+  | "security"
+  | "parking"
+  | "lighting"
+  | "sound"
+  | "getting_ready"
+  | "rain_plan"
+  | "insurance";
+
+/** Per wedding: is it needed, and what would it cost to source separately. */
+export interface VenueNeeds {
+  /** Hours of venue time the day needs (ceremony through send-off). */
+  hoursNeeded: number | null;
+  /** Overrides of the defaults. `estimate` is per guest or flat, matching the item's basis. */
+  items: Partial<Record<QuoteItemKey, { needed?: boolean; estimate?: number | null }>>;
+}
+
+/** Does the quote's price cover it? `unknown` = not asked yet — priced as missing until answered. */
+export type QuoteItemState = "included" | "not_included" | "unknown";
+
+/**
+ * How a line is charged. `food_bev` counts toward the F&B minimum and takes the service
+ * charge; `rental` (site fee) and `fee` (admin, cleaning, security…) don't.
+ */
+export type QuoteLineKind = "rental" | "food_bev" | "fee";
+
+export interface QuoteLine {
+  id: string;
+  label: string;
+  kind: QuoteLineKind;
+  amount: number | null;
+  perGuest: boolean;
+}
+
+/** One venue's quote for one wedding, as the venue wrote it — normalised by finance.ts. */
+export interface VenueQuote {
+  id: string;
+  weddingId: string;
+  /** The venue in the directory, once it's there. Quotes often arrive before that. */
+  vendorId: string | null;
+  venueName: string;
+  receivedDate: string | null;
+  validUntil: string | null;
+  hoursIncluded: number | null;
+  overtimePerHour: number | null;
+  /** Food & beverage minimum spend, before service charge and tax. */
+  fbMinimum: number | null;
+  /** Percent (22 = 22%). Null = the quote doesn't say. */
+  serviceChargePct: number | null;
+  taxPct: number | null;
+  taxOnServiceCharge: boolean;
+  lines: QuoteLine[];
+  items: Partial<Record<QuoteItemKey, QuoteItemState>>;
+  /** This venue's own cost to cover a missing item (e.g. its required valet partner). Totals, not per guest. */
+  gapOverrides: Partial<Record<QuoteItemKey, number>>;
+  notes: string;
 }
 
 export type VendorCategory =
@@ -313,6 +389,7 @@ export interface Tables {
   appointments: Appointment;
   emails: Email;
   documents: DocumentRecord;
+  venueQuotes: VenueQuote;
 }
 
 export type TableName = keyof Tables;
