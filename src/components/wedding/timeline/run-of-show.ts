@@ -76,6 +76,7 @@ export function templateItems(weddingId: string, ceremonyTime: string | null): O
     durationMin: t.dur,
     title: t.title,
     segment: t.segment,
+    subEventId: null,
     location: t.location,
     owner: t.owner,
     notes: "",

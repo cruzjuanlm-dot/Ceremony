@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 
 import { BUDGET_CATEGORIES } from "../components/wedding/wedding-helpers";
-import { starterBudgetLines, starterTasks, starterTimeline, STARTER_BUDGET } from "./starter";
+import { starterBudgetLines, starterSubEvents, starterTasks, starterTimeline, STARTER_BUDGET } from "./starter";
+import { subEventKindForBudgetLine, subEventKindForSegment } from "../lib/wedding";
 
 test("starter budget shares are the research table and land on the app's categories", () => {
   expect(STARTER_BUDGET.reduce((sum, row) => sum + row.shareBps, 0)).toBe(10000);
@@ -63,4 +64,23 @@ test("timeline is anchored to the ceremony time", () => {
   });
   expect(mass.find((item) => item.title === "Cocktail hour")?.time).toBe("17:00");
   expect(mass.find((item) => item.title === "Vendor load-out")?.owner).toBe("Couple");
+});
+
+test("a new wedding gets the sub-events the starter timeline already names", () => {
+  const events = starterSubEvents({ date: "2027-06-12", ceremonyTime: "16:00", ceremonyType: "catholic" }, "diy");
+  expect(events.map((e) => e.kind)).toEqual(["ceremony", "cocktail", "reception", "after_party"]);
+  expect(events.find((e) => e.kind === "ceremony")).toMatchObject({ date: "2027-06-12", time: "16:00", location: "Ceremony site" });
+  expect(events.find((e) => e.kind === "cocktail")?.time).toBe("17:00");
+  expect(events.every((e) => e.kind !== "welcome" && e.kind !== "rehearsal" && e.kind !== "brunch")).toBe(true);
+
+  const undated = starterSubEvents({ date: null, ceremonyTime: null, ceremonyType: "civil" }, "pro");
+  expect(undated.every((e) => e.date == null)).toBe(true);
+  expect(undated.find((e) => e.kind === "ceremony")?.time).toBe("17:00");
+
+  const lines = starterBudgetLines(40000, "pro");
+  expect(subEventKindForBudgetLine(lines.find((l) => l.category === "Ceremony")!)).toBe("ceremony");
+  expect(subEventKindForBudgetLine(lines.find((l) => l.description === "Catering & bar")!)).toBe("reception");
+  expect(subEventKindForBudgetLine(lines.find((l) => l.description === "Photography")!)).toBeNull();
+  expect(subEventKindForSegment("photos")).toBeNull();
+  expect(subEventKindForSegment("after")).toBe("after_party");
 });

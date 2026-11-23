@@ -5,13 +5,14 @@ import type {
   Client,
   Payment,
   Plan,
+  SubEvent,
   Task,
   TaskOwner,
   TimelineItem,
   Wedding,
 } from "./types";
 import { addDaysIso, plannerFee, plannerInstallments, todayIso } from "~/lib/finance";
-import { jurisdictionOf } from "~/lib/wedding";
+import { jurisdictionOf, subEventIdForKind, subEventKindForBudgetLine, subEventKindForSegment } from "~/lib/wedding";
 
 /**
  * What a brand-new wedding arrives with. Estimates only — actuals stay blank.
@@ -56,6 +57,7 @@ export function starterBudgetLines(target: number | null, plan: Plan): Omit<Budg
     estimate: null as number | null,
     actual: null,
     bookingId: null,
+    subEventId: null,
     paidBy: "couple" as const,
     // Percents stay blank until a contract names them. Blank is not zero.
     serviceChargePct: null,
@@ -241,13 +243,37 @@ export function starterTimeline(
     durationMin: b.dur,
     title: b.title,
     segment: b.segment,
+    subEventId: null,
     location: b.location,
     owner: b.owner,
     notes: b.notes,
   }));
 }
 
-type Insert<T> = (rows: Omit<T, "id">[]) => Promise<unknown>;
+type Insert<T extends { id: string }> = (rows: Omit<T, "id">[]) => Promise<T[]>;
+
+/**
+ * The parts of the day the starter timeline already names.
+ * Welcome, rehearsal, and brunch are not on that run of show, so they are not created here.
+ */
+export function starterSubEvents(
+  wedding: Pick<Wedding, "date" | "ceremonyTime" | "ceremonyType">,
+  plan: Plan,
+): Omit<SubEvent, "id" | "weddingId">[] {
+  const time = wedding.ceremonyTime ?? "17:00";
+  const beats = starterTimeline(time, wedding.ceremonyType, plan);
+  const first = (segment: TimelineItem["segment"]) => beats.find((b) => b.segment === segment);
+  const ceremony = beats.find((b) => b.title === "Ceremony") ?? first("ceremony");
+  const cocktail = first("cocktail");
+  const reception = first("reception");
+  const after = first("after");
+  return [
+    { kind: "ceremony", date: wedding.date, time: wedding.ceremonyTime ?? ceremony?.time ?? time, location: ceremony?.location ?? "" },
+    { kind: "cocktail", date: wedding.date, time: cocktail?.time ?? null, location: cocktail?.location ?? "" },
+    { kind: "reception", date: wedding.date, time: reception?.time ?? null, location: reception?.location ?? "" },
+    { kind: "after_party", date: wedding.date, time: after?.time ?? null, location: after?.location ?? "" },
+  ];
+}
 
 /** Writes the starter budget, checklist, timeline, and (Pro) fee installments for a wedding just created. */
 export async function writeStarter(
@@ -255,12 +281,16 @@ export async function writeStarter(
   plan: Plan,
   client: Client | null,
   api: {
+    insertSubEvents: Insert<SubEvent>;
     insertBudgetLines: Insert<BudgetLine>;
     insertTasks: Insert<Task>;
     insertTimeline: Insert<TimelineItem>;
     insertPayments: Insert<Payment>;
   },
 ): Promise<void> {
+  const events = await api.insertSubEvents(
+    starterSubEvents(wedding, plan).map((e) => ({ ...e, weddingId: wedding.id })),
+  );
   const target = wedding.budgetTarget > 0 ? wedding.budgetTarget : null;
   const lines = starterBudgetLines(target, plan);
   const fee = plan === "pro" && client ? plannerFee(client, target) : null;
@@ -268,7 +298,13 @@ export async function writeStarter(
     const planning = lines.filter((l) => l.category === "Planning");
     if (planning.length === 1 && planning[0]) planning[0].estimate = fee;
   }
-  await api.insertBudgetLines(lines.map((l) => ({ ...l, weddingId: wedding.id })));
+  await api.insertBudgetLines(
+    lines.map((l) => ({
+      ...l,
+      weddingId: wedding.id,
+      subEventId: subEventIdForKind(subEventKindForBudgetLine(l), events),
+    })),
+  );
   await api.insertTasks(
     starterTasks({
       date: wedding.date,
@@ -281,6 +317,7 @@ export async function writeStarter(
     starterTimeline(wedding.ceremonyTime ?? "17:00", wedding.ceremonyType, plan).map((t) => ({
       ...t,
       weddingId: wedding.id,
+      subEventId: subEventIdForKind(subEventKindForSegment(t.segment), events),
     })),
   );
   if (fee != null && wedding.date) {

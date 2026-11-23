@@ -13,6 +13,7 @@ import { CEREMONY_LABEL, daysUntil } from "~/lib/wedding";
 import { cn } from "~/shared/libretto";
 
 import { InlineTextarea } from "./fields";
+import { SubEventsPanel } from "./sub-events";
 import type { WeddingTab } from "./wedding-helpers";
 
 /** Overview — hero: how ready is this wedding for its day? */
@@ -111,6 +112,8 @@ export function OverviewTab({ wedding: w, onOpenTab }: { wedding: Wedding; onOpe
           </div>
         </div>
       </section>
+
+      <SubEventsPanel wedding={w} />
 
       {/* SUPPORTING */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

@@ -1,5 +1,5 @@
 import { seedDataset } from "./seed";
-import type { BudgetLine, Client, Dataset, FeeModel, Plan, TableName, Tables, Workspace } from "./types";
+import type { Booking, BudgetLine, Client, Dataset, FeeModel, Plan, TableName, Tables, TimelineItem, Workspace } from "./types";
 
 /**
  * DEMO-MODE persistence. The whole dataset lives in localStorage, one copy per plan, so the
@@ -14,12 +14,13 @@ import type { BudgetLine, Client, Dataset, FeeModel, Plan, TableName, Tables, Wo
  */
 
 /**
- * v7 — budget lines can carry a service-charge percent and a sales-tax percent.
- * A saved v6 dataset is copied forward with those fields blank (blank is not zero).
- * v6 itself copied a v5 flat planning fee into the fee model. Anything older is re-seeded.
+ * v8 — a wedding can have sub-events, and a budget line, vendor booking, or timeline
+ * cue can point at one. A saved v7 dataset is copied forward with an empty sub-event
+ * list and those links blank (blank is not zero).
+ * v7 added service-charge and tax percents. Anything older than v7 is re-seeded.
  */
-const VERSION = 7;
-const PREVIOUS_VERSION = 6;
+const VERSION = 8;
+const PREVIOUS_VERSION = 7;
 const PLAN_KEY = "ceremony-demo:plan";
 const dataKey = (plan: Plan, version = VERSION) => `ceremony-demo:v${version}:${plan}`;
 
@@ -51,7 +52,20 @@ export function migrateDemoDataset(data: Dataset): Dataset {
       const legacy = row as BudgetLine & { serviceChargePct?: number | null; taxPct?: number | null };
       if (legacy.serviceChargePct === undefined) legacy.serviceChargePct = null;
       if (legacy.taxPct === undefined) legacy.taxPct = null;
+      if (legacy.subEventId === undefined) legacy.subEventId = null;
     }
+  }
+  const tables = data.tables;
+  if (tables && !Array.isArray(tables.subEvents)) {
+    tables.subEvents = [];
+  }
+  for (const row of tables?.bookings ?? []) {
+    const legacy = row as Booking & { subEventId?: string | null };
+    if (legacy.subEventId === undefined) legacy.subEventId = null;
+  }
+  for (const row of tables?.timeline ?? []) {
+    const legacy = row as TimelineItem & { subEventId?: string | null };
+    if (legacy.subEventId === undefined) legacy.subEventId = null;
   }
   return data;
 }
