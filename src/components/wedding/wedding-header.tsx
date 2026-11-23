@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
 
 import { Chip, CoupleName } from "~/components/kit";
+import { NewWeddingButton } from "~/components/weddings/new-wedding-dialog";
 import { PhaseChip } from "~/components/status";
+import { useSaveFee } from "~/components/clients/follow-fee";
 import { useRows, useUpdate, useWorkspace } from "~/data/hooks";
 import type { CeremonyType, Wedding } from "~/data/types";
 import { dateLong, money, time12 } from "~/lib/format";
@@ -21,6 +23,7 @@ export function WeddingHeader({ wedding: w }: { wedding: Wedding }) {
   const ws = useWorkspace();
   const clients = useRows("clients");
   const update = useUpdate("weddings");
+  const saveFee = useSaveFee();
   const client = w.clientId ? clients.find((c) => c.id === w.clientId) : undefined;
   const days = daysUntil(w);
   const save = (patch: Partial<Wedding>) => update.mutate({ id: w.id, patch });
@@ -46,6 +49,11 @@ export function WeddingHeader({ wedding: w }: { wedding: Wedding }) {
               Client · {client.partner1} & {client.partner2}
             </Chip>
           </Link>
+        )}
+        {ws.plan === "diy" && (
+          <div className="ml-auto">
+            <NewWeddingButton />
+          </div>
         )}
       </div>
 
@@ -89,7 +97,11 @@ export function WeddingHeader({ wedding: w }: { wedding: Wedding }) {
           allowEmpty={false}
           onCommit={(v) => {
             const n = parseAmount(v);
-            if (n != null && n >= 0) save({ budgetTarget: n });
+            if (n == null || n < 0 || n === w.budgetTarget) return;
+            save({ budgetTarget: n });
+            if (client && (client.feeModel === "percent" || client.feeModel === "hybrid")) {
+              void saveFee(client, {}, { id: w.id, budgetTarget: n });
+            }
           }}
         />
         <div className="min-w-0">

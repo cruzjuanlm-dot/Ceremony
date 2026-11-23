@@ -7,6 +7,7 @@ import type {
   CeremonyType,
   Client,
   Dataset,
+  FeeTerms,
   DocumentRecord,
   Email,
   Gratuity,
@@ -23,7 +24,7 @@ import type {
   VendorCategory,
   Wedding,
 } from "./types";
-import { suggestedTip } from "~/lib/finance";
+import { plannerFee, splitAmount, suggestedTip } from "~/lib/finance";
 
 /**
  * Demo seed. Every date is an OFFSET from "today" (the moment the dataset is first created),
@@ -426,7 +427,9 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
         // 0.93: couples keep a 5–10% unassigned buffer, so lines sum to ~93% of the target.
         let estimate = round50(spec.wedding.budgetTarget * 0.93 * share * (planningLine && plan === "diy" ? 0.4 : 1));
         // A Pro client's planning fee is known from day one — it IS the estimate.
-        if (planningLine && plan === "pro" && spec.client) estimate = spec.client.planningFee;
+        const agreed = spec.client && (spec.client.status === "booked" || spec.client.status === "completed");
+        const fee = spec.client ? plannerFee(spec.client, spec.wedding.budgetTarget) : null;
+        if (planningLine && plan === "pro" && fee != null) estimate = fee;
         const vCat = LINE_VENDOR[desc];
         const booking = vCat ? bookingByCat.get(vCat) : undefined;
         let actual: number | null = null;
@@ -438,7 +441,7 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
         if (!booking && daysOut < 0) actual = round50(estimate * (0.9 + rand() * 0.2));
         if (desc === "Wedding attire" && daysOut < 190) actual = round50(estimate * (0.95 + rand() * 0.25));
         if (desc === "Wedding bands" && daysOut < 70) actual = round50(estimate * (0.9 + rand() * 0.3));
-        if (planningLine && plan === "pro" && spec.client) actual = spec.client.planningFee;
+        if (planningLine && plan === "pro" && fee != null && agreed) actual = fee;
         t.budgetLines.push({
           id: id("bud"),
           weddingId: w.id,
@@ -521,25 +524,28 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
     }
 
     if (plan === "pro" && spec.client) {
-      const fee = spec.client.planningFee;
-      const sched: [string, number, Date][] = [
-        ["Retainer", 0.4, created],
-        ["Midpoint installment", 0.3, day(180)],
-        ["Final installment", 0.3, day(30)],
-      ];
-      for (const [label, pct, due] of sched) {
-        const lateClient = label === "Final installment" && daysOut > 0 && daysOut < 30;
-        t.payments.push({
-          id: id("pay"),
-          weddingId: w.id,
-          direction: "incoming",
-          bookingId: null,
-          label,
-          amount: round50(fee * pct),
-          dueDate: iso(due),
-          paidDate: isPast(due) && !lateClient ? iso(due) : null,
-          method: isPast(due) && !lateClient ? "Card" : null,
-        });
+      const fee = plannerFee(spec.client, spec.wedding.budgetTarget);
+      if (fee != null) {
+        const [retainer, midpoint, finalPart] = splitAmount(fee, [0.4, 0.3, 0.3]);
+        const sched: [string, number, Date][] = [
+          ["Retainer", retainer ?? 0, created],
+          ["Midpoint installment", midpoint ?? 0, day(180)],
+          ["Final installment", finalPart ?? 0, day(30)],
+        ];
+        for (const [label, amount, due] of sched) {
+          const lateClient = label === "Final installment" && daysOut > 0 && daysOut < 30;
+          t.payments.push({
+            id: id("pay"),
+            weddingId: w.id,
+            direction: "incoming",
+            bookingId: null,
+            label,
+            amount,
+            dueDate: iso(due),
+            paidDate: isPast(due) && !lateClient ? iso(due) : null,
+            method: isPast(due) && !lateClient ? "Card" : null,
+          });
+        }
       }
     }
 
@@ -659,7 +665,7 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
         kind: spec.client.status === "proposal" ? "proposal" : "contract",
         title: `${spec.client.status === "proposal" ? "Planning proposal" : "Planning agreement"} — ${w.title}`,
         status: spec.client.status === "proposal" ? "sent" : "signed",
-        amount: spec.client.planningFee,
+        amount: plannerFee(spec.client, w.budgetTarget),
         updatedAt: iso(created),
         url: "https://drive.example.com/planning-agreement",
         notes: `${spec.client.serviceLevel === "full" ? "Full planning" : spec.client.serviceLevel === "partial" ? "Partial planning" : "Day-of coordination"} package.`,
@@ -826,11 +832,22 @@ function addEmails(d: Dataset, today: Date, plan: Plan) {
 /* ---------- datasets ----------------------------------------------------------------- */
 
 function proSpecs(): WeddingSpec[] {
+  const flat = (feeFlat: number): FeeTerms => ({ feeModel: "flat", feeFlat, feePercent: null, feeHours: null, feeRate: null });
+  // Hourly rate below is a demo figure. The research names hourly billing and does not publish a rate.
+  const hourly = (feeHours: number, feeRate: number): FeeTerms => ({
+    feeModel: "hourly", feeFlat: null, feePercent: null, feeHours, feeRate,
+  });
+  const percent = (feePercent: number): FeeTerms => ({
+    feeModel: "percent", feeFlat: null, feePercent, feeHours: null, feeRate: null,
+  });
+  const hybrid = (feeFlat: number, feePercent: number): FeeTerms => ({
+    feeModel: "hybrid", feeFlat, feePercent, feeHours: null, feeRate: null,
+  });
   const client = (
     partner1: string, partner2: string, status: ClientStatus, serviceLevel: ServiceLevel,
-    planningFee: number, source: string, language: "en" | "es", notes = "",
+    fee: FeeTerms, source: string, language: "en" | "es", notes = "",
   ): Omit<Client, "id" | "createdAt"> => ({
-    partner1, partner2, status, serviceLevel, planningFee, source, language, notes,
+    partner1, partner2, status, serviceLevel, ...fee, source, language, notes,
     email: `${partner1.split(" ")[0].toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")}.${partner2.split(" ")[0].toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")}@mail.example`,
     phone: language === "es" ? "(787) 555-0142" : "(305) 555-0187",
   });
@@ -853,7 +870,7 @@ function proSpecs(): WeddingSpec[] {
   return [
     {
       daysOut: 2,
-      client: client("Camila Reyes", "Andrés Torres", "booked", "partial", 6500, "Instagram", "en",
+      client: client("Camila Reyes", "Andrés Torres", "booked", "partial", hybrid(2500, 5), "Instagram", "en",
         "Destination couple from Chicago. 60% of guests flying in. Prefer text over email."),
       wedding: wed("Camila & Andrés", "symbolic", "Dorado, PR", 110, 95000, "Modern tropical, white and green", {
         destination: true, ceremonyTime: "17:30",
@@ -865,7 +882,7 @@ function proSpecs(): WeddingSpec[] {
     },
     {
       daysOut: 38,
-      client: client("Sofía Martínez", "Diego Ortiz", "booked", "full", 9800, "Referral — Hacienda Las Palmas", "es",
+      client: client("Sofía Martínez", "Diego Ortiz", "booked", "full", percent(14), "Referral — Hacienda Las Palmas", "es",
         "Mother of the bride (Carmen) is the main decision-maker on décor. Copy her on design emails."),
       wedding: wed("Sofía & Diego", "catholic", "San Juan, PR", 160, 68000, "Colonial romance, ivory and terracotta", {
         ceremonyTime: "16:00",
@@ -877,7 +894,7 @@ function proSpecs(): WeddingSpec[] {
     },
     {
       daysOut: 118,
-      client: client("Emily Carter", "James Whitfield", "booked", "full", 14000, "The Knot", "en",
+      client: client("Emily Carter", "James Whitfield", "booked", "full", flat(14000), "The Knot", "en",
         "Interfaith (Jewish + Episcopal). Ketubah signing before the ceremony."),
       wedding: wed("Emily & James", "interfaith", "Miami, FL", 140, 120000, "Black tie on the bay", {
         ceremonyTime: "18:00",
@@ -893,7 +910,7 @@ function proSpecs(): WeddingSpec[] {
     },
     {
       daysOut: 205,
-      client: client("Valeria Santos", "Marco Russo", "booked", "day_of", 3200, "Google", "en",
+      client: client("Valeria Santos", "Marco Russo", "booked", "day_of", flat(3200), "Google", "en",
         "Day-of coordination only. The couple booked their own vendors. Our job starts 6 weeks out."),
       wedding: wed("Valeria & Marco", "symbolic", "Rincón, PR", 80, 42000, "Barefoot sunset", {
         destination: true, ceremonyTime: "17:45",
@@ -905,7 +922,7 @@ function proSpecs(): WeddingSpec[] {
     },
     {
       daysOut: 300,
-      client: client("Isabel Nieves", "Gabriel Colón", "booked", "full", 8500, "Bridal expo — San Juan", "es"),
+      client: client("Isabel Nieves", "Gabriel Colón", "booked", "full", hybrid(4000, 6), "Bridal expo — San Juan", "es"),
       wedding: wed("Isabel & Gabriel", "catholic", "Ponce, PR", 220, 75000, "Hacienda classic, live salsa", {
         ceremonyTime: "15:30",
         importantNotes: "220 guests. The orchestra needs a stage and dedicated power.",
@@ -914,7 +931,7 @@ function proSpecs(): WeddingSpec[] {
     },
     {
       daysOut: 400,
-      client: client("Lauren Kim", "Daniel Park", "proposal", "partial", 5800, "Website form", "en",
+      client: client("Lauren Kim", "Daniel Park", "proposal", "partial", hourly(16, 250), "Website form", "en",
         "Proposal sent. Follow up next week. They're also talking to two other planners."),
       wedding: wed("Lauren & Daniel", "civil", "St. Augustine, FL", 120, 60000, "Garden party", {
         ceremonyTime: "16:30",
@@ -924,14 +941,14 @@ function proSpecs(): WeddingSpec[] {
     },
     {
       daysOut: Infinity,
-      client: client("Natalia Ruiz", "Javier Medina", "inquiry", "full", 9000, "Instagram DM", "es",
+      client: client("Natalia Ruiz", "Javier Medina", "inquiry", "full", percent(12), "Instagram DM", "es",
         "Beach wedding, about 150 guests, spring 2027. Prefers Spanish."),
       wedding: wed("Natalia & Javier", "catholic", "Rincón or Dorado, PR", 150, 70000, "Beach"),
       vendors: {},
     },
     {
       daysOut: -24,
-      client: client("Olivia Brooks", "Ethan Hayes", "completed", "full", 11000, "Referral", "en",
+      client: client("Olivia Brooks", "Ethan Hayes", "completed", "full", flat(11000), "Referral", "en",
         "Sent the thank-you gift. Ask for a review and their photos for the portfolio."),
       wedding: wed("Olivia & Ethan", "christian", "Miami, FL", 130, 88000, "Coastal chic", { ceremonyTime: "17:00" }),
       vendors: {

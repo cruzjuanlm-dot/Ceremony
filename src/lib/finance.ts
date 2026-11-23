@@ -1,4 +1,4 @@
-import type { BudgetLine, Booking, Guest, Payment } from "~/data/types";
+import type { BudgetLine, Booking, FeeTerms, Guest, Payment } from "~/data/types";
 
 /**
  * Ceremony's money math — the ONE place it lives (same rule as Libretto's finance.ts).
@@ -140,6 +140,120 @@ export function sumKnown(values: readonly (number | null | undefined)[]): number
     total += v;
   }
   return any ? total : null;
+}
+
+/* ---------- planner fee (Pro) -------------------------------------------------------- */
+
+/**
+ * The planner's fee for one wedding.
+ *
+ * Percent and the percent half of a hybrid are taken from the couple's budget target —
+ * the number the quote was made against — not from vendor lines, so the fee does not
+ * include itself. A blank input stays blank: a percent with no budget, a hybrid missing
+ * either half, or an hourly quote missing hours or rate all return null. Zero is a real
+ * amount and is returned as 0. The result is whole dollars, matching how money is shown.
+ */
+export function plannerFee(terms: FeeTerms, budgetTarget: number | null): number | null {
+  switch (terms.feeModel) {
+    case "flat":
+      return terms.feeFlat;
+    case "percent":
+      if (terms.feePercent == null || budgetTarget == null) return null;
+      return Math.round((budgetTarget * terms.feePercent) / 100);
+    case "hybrid":
+      if (terms.feeFlat == null || terms.feePercent == null || budgetTarget == null) return null;
+      return Math.round(terms.feeFlat + (budgetTarget * terms.feePercent) / 100);
+    case "hourly":
+      if (terms.feeHours == null || terms.feeRate == null) return null;
+      return Math.round(terms.feeHours * terms.feeRate);
+  }
+}
+
+/**
+ * Split `total` by `shares`. The last part absorbs rounding so the parts add up to
+ * `total` exactly — an installment schedule must not drift off the fee.
+ */
+export function splitAmount(total: number, shares: readonly number[]): number[] {
+  if (shares.length === 0) return [];
+  const out: number[] = [];
+  let used = 0;
+  for (let i = 0; i < shares.length; i++) {
+    if (i === shares.length - 1) out.push(total - used);
+    else {
+      const part = Math.round(total * shares[i]);
+      out.push(part);
+      used += part;
+    }
+  }
+  return out;
+}
+
+export interface FeeInstallment {
+  label: string;
+  amount: number;
+  dueDate: string;
+}
+
+/**
+ * Retainer at signing, midpoint six months out, final 30 days out
+ * (research §1.8: 40% / 30% / 30%). Dates that have already passed collapse
+ * into fewer payments so a short engagement is not born overdue.
+ * Amounts sum to `fee`.
+ */
+export function plannerInstallments(fee: number, weddingDate: string, today: string): FeeInstallment[] {
+  const finalDue = addDaysIso(weddingDate, -30);
+  const midDue = addDaysIso(weddingDate, -180);
+  if (finalDue <= today) return [{ label: "Planning fee", amount: fee, dueDate: today }];
+  const shares = midDue <= today ? [0.5, 0.5] : [0.4, 0.3, 0.3];
+  const amounts = splitAmount(fee, shares);
+  const labels = midDue <= today
+    ? ["Retainer", "Final installment"]
+    : ["Retainer", "Midpoint installment", "Final installment"];
+  const dates = midDue <= today ? [today, finalDue] : [today, midDue, finalDue];
+  return labels.map((label, i) => ({ label, amount: amounts[i] ?? 0, dueDate: dates[i] ?? today }));
+}
+
+/**
+ * New amounts for unpaid incoming installments so they, plus what's already paid,
+ * add up to `fee`. Returns nothing when the fee is blank, nothing is unpaid, or
+ * the paid total is already past the fee (paid rows are never rewritten).
+ * Shares follow the unpaid rows' current amounts; even split when those are all zero.
+ */
+export function rescaleUnpaidInstallments<T extends { id: string; amount: number; paidDate: string | null }>(
+  fee: number | null,
+  payments: readonly T[],
+): { id: string; amount: number }[] {
+  if (fee == null) return [];
+  const unpaid = payments.filter((p) => p.paidDate == null);
+  if (unpaid.length === 0) return [];
+  const paid = payments.filter((p) => p.paidDate != null).reduce((s, p) => s + p.amount, 0);
+  const remaining = fee - paid;
+  if (remaining < 0) return [];
+  const current = unpaid.map((p) => p.amount);
+  const sum = current.reduce((s, n) => s + n, 0);
+  const shares = sum > 0 ? current.map((n) => n / sum) : unpaid.map(() => 1 / unpaid.length);
+  const next = splitAmount(remaining, shares);
+  return unpaid.flatMap((p, i) => {
+    const amount = next[i];
+    return amount != null && amount !== p.amount ? [{ id: p.id, amount }] : [];
+  });
+}
+
+/**
+ * The single Planning line is the fee on the couple's budget. Update its estimate
+ * when the fee is a real number. A blank fee does not wipe a line the couple typed.
+ * More than one Planning line is left alone.
+ */
+export function planningEstimateUpdate(
+  lines: readonly BudgetLine[],
+  fee: number | null,
+): { id: string; estimate: number } | null {
+  if (fee == null) return null;
+  const planning = lines.filter((l) => l.category === "Planning");
+  if (planning.length !== 1) return null;
+  const line = planning[0];
+  if (line.estimate === fee) return null;
+  return { id: line.id, estimate: fee };
 }
 
 /**

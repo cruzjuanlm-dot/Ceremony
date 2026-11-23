@@ -10,12 +10,14 @@ import { ClientStatusChip, PaymentChip, PhaseChip } from "~/components/status";
 import { InlineNotes, InlineSelect, InlineText } from "~/components/vendors/inline-field";
 import { useRows, useUpdate } from "~/data/hooks";
 import type { Client, ClientStatus, ServiceLevel } from "~/data/types";
-import { paymentState, paymentTotals, todayIso } from "~/lib/finance";
+import { paymentState, paymentTotals, plannerFee, sumKnown, todayIso } from "~/lib/finance";
 import { dateLong, dateShort, money } from "~/lib/format";
 import { CLIENT_STATUS_LABEL, SERVICE_LEVEL_LABEL, weddingPhase } from "~/lib/wedding";
 import { cn } from "~/shared/libretto";
 
 import { clientName } from "./client-stats";
+import { FeeTermsEditor } from "./fee-terms";
+import { useSaveFee } from "./follow-fee";
 
 export const STATUS_OPTIONS = (Object.keys(CLIENT_STATUS_LABEL) as ClientStatus[]).map((k) => ({
   value: k,
@@ -41,6 +43,7 @@ export function ClientSheet({ clientId, onClose }: { clientId: string | null; on
 
 function ClientDetail({ client }: { client: Client }) {
   const update = useUpdate("clients");
+  const saveFee = useSaveFee();
   const weddings = useRows("weddings").filter((w) => w.clientId === client.id);
   const weddingIds = new Set(weddings.map((w) => w.id));
   const fees = useRows("payments")
@@ -48,7 +51,11 @@ function ClientDetail({ client }: { client: Client }) {
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const today = todayIso();
   const totals = paymentTotals(fees, today);
+  const scheduled = sumKnown(fees.map((p) => p.amount));
+  const quote = weddings.length > 1 ? null : plannerFee(client, weddings[0]?.budgetTarget ?? null);
+  const mismatch = quote != null && scheduled != null && scheduled !== quote;
   const save = (patch: Partial<Client>) => update.mutate({ id: client.id, patch });
+  const saveTerms = (patch: Partial<Client>) => void saveFee(client, patch);
 
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
@@ -74,12 +81,8 @@ function ClientDetail({ client }: { client: Client }) {
           options={SERVICE_OPTIONS}
           onCommit={(v) => save({ serviceLevel: v })}
         />
-        <InlineText
-          label="Planning fee"
-          type="number"
-          value={String(client.planningFee)}
-          onCommit={(v) => save({ planningFee: Number(v) || 0 })}
-        />
+        <FeeTermsEditor client={client} quote={weddings.length > 1 ? undefined : quote} onCommit={saveTerms} />
+        {mismatch && <p className={cn("text-xs", toneText("warn"))}>Installments total {money(scheduled)}.</p>}
         <InlineText label="Source" value={client.source} onCommit={(v) => save({ source: v })} />
         <InlineSelect label="Language" value={client.language} options={LANGUAGE_OPTIONS} onCommit={(v) => save({ language: v })} />
         <div className="mt-2">
@@ -106,6 +109,9 @@ function ClientDetail({ client }: { client: Client }) {
                       {dateLong(w.date)}
                       {w.city && ` · ${w.city}`}
                     </div>
+                    {weddings.length > 1 && (
+                      <div className="text-xs tabular-nums">{money(plannerFee(client, w.budgetTarget))}</div>
+                    )}
                   </div>
                   <PhaseChip phase={weddingPhase(w)} />
                 </Link>
@@ -141,6 +147,7 @@ function ClientDetail({ client }: { client: Client }) {
                   </span>
                 )}
               </div>
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -167,6 +174,7 @@ function ClientDetail({ client }: { client: Client }) {
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </>
           )}
         </section>

@@ -15,15 +15,22 @@ import { Input } from "@libretto-ui/input";
 import { Label } from "@libretto-ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@libretto-ui/select";
 
-import { useInsert, useRows } from "~/data/hooks";
+import { useInsert, useInsertMany, useRows, useWorkspace } from "~/data/hooks";
+import { writeStarter } from "~/data/starter";
 import type { CeremonyType } from "~/data/types";
 import { CEREMONY_LABEL } from "~/lib/wedding";
+import { parseAmount } from "~/components/wedding/wedding-helpers";
 
 /** "New wedding" (DESIGN_LANGUAGE §1: New = a standalone object; dialog = several fields). */
 export function NewWeddingButton() {
   const [open, setOpen] = useState(false);
+  const ws = useWorkspace();
   const clients = useRows("clients");
   const insert = useInsert("weddings");
+  const insertLines = useInsertMany("budgetLines");
+  const insertTasks = useInsertMany("tasks");
+  const insertTimeline = useInsertMany("timeline");
+  const insertPayments = useInsertMany("payments");
   const navigate = useNavigate();
   const [form, setForm] = useState({
     title: "",
@@ -39,6 +46,7 @@ export function NewWeddingButton() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
+    const target = parseAmount(form.budgetTarget);
     const w = await insert.mutateAsync({
       title: form.title.trim(),
       clientId: form.clientId || null,
@@ -48,13 +56,20 @@ export function NewWeddingButton() {
       ceremonyVenueId: null,
       city: form.city.trim(),
       guestEstimate: Number(form.guestEstimate) || 0,
-      budgetTarget: Number(form.budgetTarget) || 0,
+      budgetTarget: target ?? 0,
       ceremonyType: form.ceremonyType,
       destination: false,
       style: "",
       importantNotes: "",
       rainPlan: "",
       createdAt: new Date().toISOString().slice(0, 10),
+    });
+    const client = w.clientId ? (clients.find((c) => c.id === w.clientId) ?? null) : null;
+    await writeStarter(w, ws.plan, client, {
+      insertBudgetLines: (rows) => insertLines.mutateAsync(rows),
+      insertTasks: (rows) => insertTasks.mutateAsync(rows),
+      insertTimeline: (rows) => insertTimeline.mutateAsync(rows),
+      insertPayments: (rows) => insertPayments.mutateAsync(rows),
     });
     setOpen(false);
     navigate({ to: "/weddings/$weddingId", params: { weddingId: w.id } });
@@ -129,7 +144,10 @@ export function NewWeddingButton() {
             </Select>
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={!form.title.trim() || insert.isPending}>
+            <Button
+              type="submit"
+              disabled={!form.title.trim() || insert.isPending || insertLines.isPending || insertTasks.isPending}
+            >
               New wedding
             </Button>
           </DialogFooter>

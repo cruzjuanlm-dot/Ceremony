@@ -25,8 +25,27 @@ export interface Workspace {
 export type ClientStatus = "inquiry" | "proposal" | "booked" | "completed" | "lost";
 export type ServiceLevel = "full" | "partial" | "day_of";
 
+/**
+ * How the planner bills the couple. The dollar amount is never stored — `plannerFee()`
+ * in finance.ts computes it, so a percent stays tied to the wedding's budget target.
+ * Any input left blank stays null. Blank is not zero.
+ */
+export type FeeModel = "flat" | "percent" | "hybrid" | "hourly";
+
+export interface FeeTerms {
+  feeModel: FeeModel;
+  /** Flat package, or the flat base of a hybrid. */
+  feeFlat: number | null;
+  /** Percent of the couple's budget target. 12 means 12%. */
+  feePercent: number | null;
+  /** Hours on an hourly engagement. */
+  feeHours: number | null;
+  /** Dollars per hour. */
+  feeRate: number | null;
+}
+
 /** Pro only — the couple as the planner's customer. DIY workspaces have no clients. */
-export interface Client {
+export interface Client extends FeeTerms {
   id: string;
   partner1: string;
   partner2: string;
@@ -34,8 +53,6 @@ export interface Client {
   phone: string;
   status: ClientStatus;
   serviceLevel: ServiceLevel;
-  /** The planner's own fee for this couple (what the couple pays the planner). */
-  planningFee: number;
   source: string;
   language: "en" | "es";
   notes: string;

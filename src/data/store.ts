@@ -1,5 +1,5 @@
 import { seedDataset } from "./seed";
-import type { Dataset, Plan, TableName, Tables, Workspace } from "./types";
+import type { Client, Dataset, FeeModel, Plan, TableName, Tables, Workspace } from "./types";
 
 /**
  * DEMO-MODE persistence. The whole dataset lives in localStorage, one copy per plan, so the
@@ -13,9 +13,36 @@ import type { Dataset, Plan, TableName, Tables, Workspace } from "./types";
  * in-memory copy rather than crashing.
  */
 
-const VERSION = 5;
+/**
+ * v6 — a client's fee is a model (flat, percent of budget, hybrid, hourly) instead of one
+ * number. A saved v5 dataset is copied forward: the old number becomes a flat fee.
+ * Anything older is re-seeded, because the key includes the version.
+ */
+const VERSION = 6;
+const PREVIOUS_VERSION = 5;
 const PLAN_KEY = "ceremony-demo:plan";
-const dataKey = (plan: Plan) => `ceremony-demo:v${VERSION}:${plan}`;
+const dataKey = (plan: Plan, version = VERSION) => `ceremony-demo:v${version}:${plan}`;
+
+const FEE_MODELS: readonly FeeModel[] = ["flat", "percent", "hybrid", "hourly"];
+
+/** Fill fee fields that an older save doesn't have. A legacy `planningFee` becomes a flat fee. */
+function migrateDataset(data: Dataset): Dataset {
+  const clients = data.tables?.clients;
+  if (!Array.isArray(clients)) return data;
+  for (const row of clients) {
+    const legacy = row as Client & { planningFee?: number };
+    if (!FEE_MODELS.includes(legacy.feeModel)) {
+      const flat = typeof legacy.planningFee === "number" ? legacy.planningFee : null;
+      legacy.feeModel = "flat";
+      legacy.feeFlat = flat;
+      legacy.feePercent = null;
+      legacy.feeHours = null;
+      legacy.feeRate = null;
+    }
+    delete legacy.planningFee;
+  }
+  return data;
+}
 
 const memory = new Map<string, string>();
 
@@ -64,13 +91,21 @@ function dataset(): Dataset {
   let data: Dataset | null = null;
   if (raw) {
     try {
-      data = JSON.parse(raw) as Dataset;
+      data = migrateDataset(JSON.parse(raw) as Dataset);
     } catch {
       data = null;
     }
   }
   if (!data) {
-    data = seedDataset(plan, new Date());
+    const previous = readKey(dataKey(plan, PREVIOUS_VERSION));
+    if (previous) {
+      try {
+        data = migrateDataset(JSON.parse(previous) as Dataset);
+      } catch {
+        data = null;
+      }
+    }
+    if (!data) data = seedDataset(plan, new Date());
     writeKey(dataKey(plan), JSON.stringify(data));
   }
   cache = { plan, data };
@@ -115,8 +150,18 @@ export async function insert<K extends TableName>(
   table: K,
   row: Omit<Tables[K], "id"> & { id?: string },
 ): Promise<Tables[K]> {
-  const full = { ...row, id: row.id ?? newId(table.slice(0, 3)) } as Tables[K];
-  setRows(table, [...listSync(table), full]);
+  const [full] = await insertMany(table, [row]);
+  if (!full) throw new Error(`Could not insert into ${table}`);
+  return full;
+}
+
+export async function insertMany<K extends TableName>(
+  table: K,
+  rows: (Omit<Tables[K], "id"> & { id?: string })[],
+): Promise<Tables[K][]> {
+  const full = rows.map((row) => ({ ...row, id: row.id ?? newId(table.slice(0, 3)) }) as Tables[K]);
+  if (full.length === 0) return [];
+  setRows(table, [...listSync(table), ...full]);
   persist();
   return full;
 }

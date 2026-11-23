@@ -27,12 +27,14 @@ export function InlineText({
   onCommit,
   placeholder,
   type = "text",
+  inputMode,
 }: {
   label: string;
   value: string;
   onCommit: (v: string) => void;
   placeholder?: string;
   type?: "text" | "email" | "tel" | "number";
+  inputMode?: "numeric" | "decimal";
 }) {
   return (
     <FieldRow label={label}>
@@ -40,7 +42,7 @@ export function InlineText({
         key={value}
         aria-label={label}
         type={type}
-        inputMode={type === "number" ? "numeric" : undefined}
+        inputMode={inputMode ?? (type === "number" ? "numeric" : undefined)}
         defaultValue={value}
         placeholder={placeholder ?? "—"}
         className={cn(cellControlClass, "-ml-2 placeholder:text-muted-foreground/70")}

@@ -1,6 +1,9 @@
 import type { Wedding } from "~/data/types";
 import { addDaysIso } from "~/lib/finance";
 import { dateShort } from "~/lib/format";
+import { jurisdictionOf, type Jurisdiction } from "~/lib/wedding";
+
+export { jurisdictionOf, type Jurisdiction };
 
 /**
  * Marriage-license requirements by jurisdiction, from WEDDING_INDUSTRY_RESEARCH.md §1.10–1.11.
@@ -12,14 +15,6 @@ export interface LicenseItem {
   /** Date-relative hint, e.g. "Not before Jun 26". */
   when?: string;
   verify?: boolean;
-}
-
-export type Jurisdiction = "PR" | "FL";
-
-export function jurisdictionOf(city: string): Jurisdiction | null {
-  if (/\bPR\b|puerto rico/i.test(city)) return "PR";
-  if (/\bFL\b|florida/i.test(city)) return "FL";
-  return null;
 }
 
 export function licenseChecklist(w: Pick<Wedding, "date" | "ceremonyType">, j: Jurisdiction): { group: string; items: LicenseItem[] }[] {

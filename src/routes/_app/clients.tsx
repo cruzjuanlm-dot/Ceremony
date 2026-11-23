@@ -5,7 +5,7 @@ import { SegmentedControl } from "@libretto-ui/segmented-control";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@libretto-ui/table";
 
 import { ClientSheet } from "~/components/clients/client-sheet";
-import { clientName, clientPipeline, feeTotal } from "~/components/clients/client-stats";
+import { clientFee, clientName, clientPipeline, feeTotal } from "~/components/clients/client-stats";
 import { ClientStatusSelect } from "~/components/clients/client-status-select";
 import { NewClientButton } from "~/components/clients/new-client-dialog";
 import { Hero, HeroFigure } from "~/components/financials/hero";
@@ -33,7 +33,7 @@ function ClientsPage() {
   // A couple has no clients (ceremony/CLAUDE.md).
   if (ws.plan === "diy") return <Navigate to="/dashboard" replace />;
 
-  const p = clientPipeline(clients);
+  const p = clientPipeline(clients, weddings);
   const weddingOf = (c: Client) => weddings.find((w) => w.clientId === c.id) ?? null;
   const sorted = [...clients].sort((a, b) => {
     const da = weddingOf(a)?.date ?? "9999";
@@ -87,19 +87,20 @@ function ClientsPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {COLUMNS.map((status) => {
             const items = sorted.filter((c) => c.status === status);
+            const columnFee = feeTotal(items, weddings);
             return (
               <section key={status} className={cn("min-w-0", status === "lost" && "opacity-75")}>
                 <div className="mb-2 flex items-baseline justify-between px-1">
                   <h2 className="text-sm font-semibold">{CLIENT_STATUS_LABEL[status]}</h2>
                   <span className="text-xs tabular-nums text-muted-foreground">
                     {items.length}
-                    {items.length > 0 && ` · ${money(feeTotal(items))}`}
+                    {items.length > 0 && columnFee != null && ` · ${money(columnFee)}`}
                   </span>
                 </div>
                 <div className="grid gap-2">
                   {items.length === 0 && <div className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">None</div>}
                   {items.map((c) => (
-                    <ClientCard key={c.id} client={c} wedding={weddingOf(c)} onOpen={() => setOpenId(c.id)} />
+                    <ClientCard key={c.id} client={c} wedding={weddingOf(c)} fee={clientFee(c, weddings)} onOpen={() => setOpenId(c.id)} />
                   ))}
                 </div>
               </section>
@@ -132,7 +133,7 @@ function ClientsPage() {
                     {w?.city && <div className="text-xs text-muted-foreground">{w.city}</div>}
                   </TableCell>
                   <TableCell>{SERVICE_LEVEL_LABEL[c.serviceLevel]}</TableCell>
-                  <TableCell numeric>{c.planningFee ? money(c.planningFee) : "—"}</TableCell>
+                  <TableCell numeric>{money(clientFee(c, weddings))}</TableCell>
                   <TableCell className="text-muted-foreground">{c.source || "—"}</TableCell>
                   <TableCell>
                     <Chip>{c.language.toUpperCase()}</Chip>
@@ -152,7 +153,17 @@ function ClientsPage() {
   );
 }
 
-function ClientCard({ client: c, wedding: w, onOpen }: { client: Client; wedding: Wedding | null; onOpen: () => void }) {
+function ClientCard({
+  client: c,
+  wedding: w,
+  fee,
+  onOpen,
+}: {
+  client: Client;
+  wedding: Wedding | null;
+  fee: number | null;
+  onOpen: () => void;
+}) {
   return (
     <article
       role="button"
@@ -171,7 +182,7 @@ function ClientCard({ client: c, wedding: w, onOpen }: { client: Client; wedding
       </div>
       <div className="mt-2 flex items-baseline justify-between gap-2 text-sm">
         <span className="min-w-0 truncate">{SERVICE_LEVEL_LABEL[c.serviceLevel]}</span>
-        <span className="font-medium tabular-nums">{c.planningFee ? money(c.planningFee) : "—"}</span>
+        <span className="font-medium tabular-nums">{money(fee)}</span>
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="min-w-0 truncate text-xs text-muted-foreground" title={c.source}>{c.source || "—"}</span>
