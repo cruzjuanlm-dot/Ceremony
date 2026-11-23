@@ -1,4 +1,4 @@
-import type { BudgetLine, Booking, Guest, Payment, Vendor } from "~/data/types";
+import type { BudgetLine, Booking, Guest, Payment } from "~/data/types";
 
 /**
  * Ceremony's money math — the ONE place it lives (same rule as Libretto's finance.ts).
@@ -104,7 +104,11 @@ export function bookingBalance(b: Booking, payments: Payment[]) {
   return { contracted: b.amount ?? 0, scheduled, paid, balance: (b.amount ?? 0) - paid };
 }
 
-/** Standard gratuity guidance, as a % of the vendor's contract. A starting point, not a rule. */
+/**
+ * Standard gratuity guidance. A starting point, not a rule.
+ * Percents apply to the vendor's contract; the officiant figure is a flat envelope
+ * (or a church donation of about that size).
+ */
 export const SUGGESTED_TIP_PCT: Partial<Record<string, number>> = {
   catering: 0.15,
   beauty: 0.2,
@@ -114,26 +118,36 @@ export const SUGGESTED_TIP_PCT: Partial<Record<string, number>> = {
   videography: 0.05,
 };
 
+export const SUGGESTED_TIP_FLAT: Partial<Record<string, number>> = {
+  officiant: 100,
+};
+
+/** Suggested envelope for one contract, rounded to $5. Null when there's no guidance or no contract. */
+export function suggestedTip(amount: number | null, category: string): number | null {
+  if (amount == null || amount <= 0) return null;
+  const pct = SUGGESTED_TIP_PCT[category];
+  if (pct != null) return Math.round((amount * pct) / 5) * 5;
+  return SUGGESTED_TIP_FLAT[category] ?? null;
+}
+
+/** Sum of known amounts. Every value blank returns null — blank is not zero. */
+export function sumKnown(values: readonly (number | null | undefined)[]): number | null {
+  let total = 0;
+  let any = false;
+  for (const v of values) {
+    if (v == null) continue;
+    any = true;
+    total += v;
+  }
+  return any ? total : null;
+}
+
 /**
  * Estimate − projected: positive = under the estimate, negative = over. Lines without an
  * actual have no variance yet (projected falls back to the estimate).
  */
 export const lineVariance = (l: BudgetLine): number | null =>
   l.actual == null ? null : (l.estimate ?? 0) - lineProjected(l);
-
-/** Suggested gratuity per booked vendor (SUGGESTED_TIP_PCT), rounded to $5. */
-export function suggestedTips(bookings: Booking[], vendors: Vendor[]) {
-  const rows: { booking: Booking; vendor: Vendor; pct: number; tip: number }[] = [];
-  for (const b of bookings) {
-    if (b.stage !== "booked" || !b.amount) continue;
-    const vendor = vendors.find((v) => v.id === b.vendorId);
-    const pct = vendor ? SUGGESTED_TIP_PCT[vendor.category] : undefined;
-    if (!vendor || !pct) continue;
-    rows.push({ booking: b, vendor, pct, tip: Math.round((b.amount * pct) / 5) * 5 });
-  }
-  const total = rows.reduce((s, r) => s + r.tip, 0);
-  return { rows, total };
-}
 
 /* ---------- guests ------------------------------------------------------------------- */
 

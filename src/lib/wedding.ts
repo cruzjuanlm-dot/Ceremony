@@ -8,6 +8,7 @@ import type {
   MealChoice,
   ServiceLevel,
   TimelineSegment,
+  TipHandover,
   VendorCategory,
   Wedding,
 } from "~/data/types";
@@ -123,6 +124,12 @@ export const MEAL_LABEL: Record<MealChoice, string> = {
   chicken: "Chicken",
   vegetarian: "Vegetarian",
   kids: "Kids",
+};
+
+export const TIP_HANDOVER_LABEL: Record<TipHandover, string> = {
+  planner: "Planner",
+  couple: "Couple",
+  family: "Family",
 };
 
 export const APPOINTMENT_LABEL: Record<AppointmentKind, string> = {
