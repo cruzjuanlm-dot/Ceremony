@@ -1,5 +1,5 @@
 import { seedDataset } from "./seed";
-import type { Client, Dataset, FeeModel, Plan, TableName, Tables, Workspace } from "./types";
+import type { BudgetLine, Client, Dataset, FeeModel, Plan, TableName, Tables, Workspace } from "./types";
 
 /**
  * DEMO-MODE persistence. The whole dataset lives in localStorage, one copy per plan, so the
@@ -14,32 +14,44 @@ import type { Client, Dataset, FeeModel, Plan, TableName, Tables, Workspace } fr
  */
 
 /**
- * v6 — a client's fee is a model (flat, percent of budget, hybrid, hourly) instead of one
- * number. A saved v5 dataset is copied forward: the old number becomes a flat fee.
- * Anything older is re-seeded, because the key includes the version.
+ * v7 — budget lines can carry a service-charge percent and a sales-tax percent.
+ * A saved v6 dataset is copied forward with those fields blank (blank is not zero).
+ * v6 itself copied a v5 flat planning fee into the fee model. Anything older is re-seeded.
  */
-const VERSION = 6;
-const PREVIOUS_VERSION = 5;
+const VERSION = 7;
+const PREVIOUS_VERSION = 6;
 const PLAN_KEY = "ceremony-demo:plan";
 const dataKey = (plan: Plan, version = VERSION) => `ceremony-demo:v${version}:${plan}`;
 
 const FEE_MODELS: readonly FeeModel[] = ["flat", "percent", "hybrid", "hourly"];
 
-/** Fill fee fields that an older save doesn't have. A legacy `planningFee` becomes a flat fee. */
-function migrateDataset(data: Dataset): Dataset {
+/**
+ * Fill fields an older save doesn't have.
+ * A legacy `planningFee` becomes a flat fee. Service charge and tax stay blank.
+ */
+export function migrateDemoDataset(data: Dataset): Dataset {
   const clients = data.tables?.clients;
-  if (!Array.isArray(clients)) return data;
-  for (const row of clients) {
-    const legacy = row as Client & { planningFee?: number };
-    if (!FEE_MODELS.includes(legacy.feeModel)) {
-      const flat = typeof legacy.planningFee === "number" ? legacy.planningFee : null;
-      legacy.feeModel = "flat";
-      legacy.feeFlat = flat;
-      legacy.feePercent = null;
-      legacy.feeHours = null;
-      legacy.feeRate = null;
+  if (Array.isArray(clients)) {
+    for (const row of clients) {
+      const legacy = row as Client & { planningFee?: number };
+      if (!FEE_MODELS.includes(legacy.feeModel)) {
+        const flat = typeof legacy.planningFee === "number" ? legacy.planningFee : null;
+        legacy.feeModel = "flat";
+        legacy.feeFlat = flat;
+        legacy.feePercent = null;
+        legacy.feeHours = null;
+        legacy.feeRate = null;
+      }
+      delete legacy.planningFee;
     }
-    delete legacy.planningFee;
+  }
+  const lines = data.tables?.budgetLines;
+  if (Array.isArray(lines)) {
+    for (const row of lines) {
+      const legacy = row as BudgetLine & { serviceChargePct?: number | null; taxPct?: number | null };
+      if (legacy.serviceChargePct === undefined) legacy.serviceChargePct = null;
+      if (legacy.taxPct === undefined) legacy.taxPct = null;
+    }
   }
   return data;
 }
@@ -91,7 +103,7 @@ function dataset(): Dataset {
   let data: Dataset | null = null;
   if (raw) {
     try {
-      data = migrateDataset(JSON.parse(raw) as Dataset);
+      data = migrateDemoDataset(JSON.parse(raw) as Dataset);
     } catch {
       data = null;
     }
@@ -100,7 +112,7 @@ function dataset(): Dataset {
     const previous = readKey(dataKey(plan, PREVIOUS_VERSION));
     if (previous) {
       try {
-        data = migrateDataset(JSON.parse(previous) as Dataset);
+        data = migrateDemoDataset(JSON.parse(previous) as Dataset);
       } catch {
         data = null;
       }

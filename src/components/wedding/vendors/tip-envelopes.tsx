@@ -96,6 +96,8 @@ export function TipEnvelopes({ wedding: w }: { wedding: Wedding }) {
         actual,
         bookingId: null,
         paidBy: "couple",
+        serviceChargePct: null,
+        taxPct: null,
       });
       lineId = created.id;
     } else {

@@ -203,6 +203,8 @@ function BookingCard({
                 actual: b.amount,
                 bookingId: b.id,
                 paidBy: "couple",
+                serviceChargePct: null,
+                taxPct: null,
               })
             }
           >

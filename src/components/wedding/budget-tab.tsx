@@ -16,8 +16,9 @@ import {
 
 import { FeeTermsEditor } from "~/components/clients/fee-terms";
 import { useSaveFee } from "~/components/clients/follow-fee";
-import { EmptyState, StatTile, toneText } from "~/components/kit";
 import { AddPaymentButton } from "~/components/financials/add-payment-dialog";
+import { EmptyState, StatTile, toneText } from "~/components/kit";
+import { PhoneScrollHint } from "~/components/phone-scroll-hint";
 import { PaymentChip } from "~/components/status";
 import { useInsert, useRemove, useRows, useUpdate, useWeddingRows, useWorkspace } from "~/data/hooks";
 import type { BudgetCategory, BudgetLine, Payment, Wedding } from "~/data/types";
@@ -26,15 +27,17 @@ import {
   budgetSummary,
   paymentState,
   paymentTotals,
+  lineVariance,
   plannerFee,
+  serviceChargeAndTax,
   sumKnown,
   todayIso,
+  type CategoryBudget,
 } from "~/lib/finance";
 import { dateShort, money, pct } from "~/lib/format";
 import { cellActionClass, cn } from "~/shared/libretto";
 
-import { CellAmount, CellText, GhostSelect } from "./fields";
-import { lineVariance } from "~/lib/finance";
+import { CellAmount, CellPercent, CellText, GhostSelect } from "./fields";
 import { BUDGET_CATEGORIES } from "./wedding-helpers";
 
 const PAID_BY = [
@@ -105,6 +108,8 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
       actual: null,
       bookingId: null,
       paidBy: "couple",
+      serviceChargePct: null,
+      taxPct: null,
     });
   const markPaid = (p: Payment) => updatePayment.mutate({ id: p.id, patch: { paidDate: today } });
   const vendorFor = (p: Payment) => {
@@ -122,7 +127,13 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
           label="Projected"
           value={money(summary.projected)}
           tone={summary.overBudget ? "bad" : undefined}
-          sub={summary.target > 0 ? `${pct(summary.projected / summary.target)} of target` : undefined}
+          sub={
+            summary.target > 0
+              ? `${pct(summary.projected / summary.target)} of target${summary.chargesKnown ? ` · ${money(summary.serviceAndTax)} service & tax` : ""}`
+              : summary.chargesKnown
+                ? `${money(summary.serviceAndTax)} service & tax`
+                : undefined
+          }
         />
         <StatTile
           label="Paid so far"
@@ -136,6 +147,10 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
           tone={summary.overBudget ? "bad" : "good"}
         />
       </div>
+
+      <p className="-mt-4 text-xs text-muted-foreground">
+        Venue and catering lines can add a service charge and sales tax beside the contract. That charge is not a tip.
+      </p>
 
       <TableShell
         header={
@@ -162,12 +177,14 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
             Start with the venue — it's usually the biggest line.
           </EmptyState>
         ) : (
-          <Table className="min-w-[640px]">
+          <PhoneScrollHint>
+          <Table className="min-w-[760px]">
             <colgroup>
               <col />
               <col className="w-28" />
-              <col className="w-32" />
-              <col className="w-32" />
+              <col className="w-28" />
+              <col className="w-28" />
+              <col className="w-40" />
               <col className="w-28" />
               <col className="w-10" />
             </colgroup>
@@ -177,6 +194,10 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
                 <TableHead>Paid by</TableHead>
                 <TableHead numeric>Estimate</TableHead>
                 <TableHead numeric>Actual</TableHead>
+                <TableHead numeric>
+                  Service & tax
+                  <span className="sr-only">, not a tip</span>
+                </TableHead>
                 <TableHead numeric>Difference</TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>
@@ -212,6 +233,9 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
                       <TableCell numeric className="py-1">
                         <CellAmount ariaLabel="Actual" value={l.actual} onCommit={(v) => save(l.id, { actual: v })} />
                       </TableCell>
+                      <TableCell numeric className="py-1 align-top">
+                        <ServiceChargeCell line={l} onSave={(patch) => save(l.id, patch)} />
+                      </TableCell>
                       <TableCell numeric>
                         <Variance value={lineVariance(l)} />
                       </TableCell>
@@ -234,15 +258,21 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
             <TableFooter>
               <TableRow>
                 <TableCell colSpan={2}>Total</TableCell>
-                <TableCell numeric>{money(summary.estimate)}</TableCell>
+                <TableCell numeric>{money(summary.contractEstimate)}</TableCell>
                 <TableCell numeric>{money(sumKnown(lines.map((l) => l.actual)))}</TableCell>
                 <TableCell numeric>
-                  <Variance value={summary.actual ? summary.estimate - summary.projected : null} />
+                  {summary.chargesKnown ? money(summary.serviceAndTax) : "—"}
+                </TableCell>
+                <TableCell numeric>
+                  <Variance
+                    value={summary.contractActual ? summary.contractEstimate - summary.contractProjected : null}
+                  />
                 </TableCell>
                 <TableCell />
               </TableRow>
             </TableFooter>
           </Table>
+          </PhoneScrollHint>
         )}
       </TableShell>
 
@@ -255,7 +285,7 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
           {outgoing.length === 0 ? (
             <p className="text-sm text-muted-foreground">No vendor payments scheduled yet.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <PhoneScrollHint>
               <PaymentsTable
                 rows={outgoing}
                 today={today}
@@ -263,7 +293,7 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
                 whoLabel="Vendor"
                 onMarkPaid={markPaid}
               />
-            </div>
+            </PhoneScrollHint>
           )}
       </TableShell>
 
@@ -291,9 +321,9 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
           {incoming.length === 0 ? (
             <p className="text-sm text-muted-foreground">No fee installments scheduled.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <PhoneScrollHint>
               <PaymentsTable rows={incoming} today={today} onMarkPaid={markPaid} />
-            </div>
+            </PhoneScrollHint>
           )}
         </section>
       )}
@@ -307,7 +337,7 @@ function BudgetGroup({
   children,
 }: {
   category: string;
-  totals?: { estimate: number; actual: number; projected: number };
+  totals?: CategoryBudget;
   children: ReactNode;
 }) {
   return (
@@ -317,18 +347,59 @@ function BudgetGroup({
           {category}
         </TableCell>
         <TableCell numeric className="pr-4 text-muted-foreground">
-          {totals ? money(totals.estimate) : "—"}
+          {totals ? money(totals.contractEstimate) : "—"}
         </TableCell>
         <TableCell numeric className="pr-4 text-muted-foreground">
-          {totals?.actual ? money(totals.actual) : "—"}
+          {totals?.contractActual ? money(totals.contractActual) : "—"}
+        </TableCell>
+        <TableCell numeric className="pr-4 text-muted-foreground">
+          {totals?.chargesKnown ? money(totals.serviceAndTax) : "—"}
         </TableCell>
         <TableCell numeric>
-          <Variance value={totals?.actual ? totals.estimate - totals.projected : null} />
+          <Variance
+            value={totals?.contractActual ? totals.contractEstimate - totals.contractProjected : null}
+          />
         </TableCell>
         <TableCell />
       </TableSectionRow>
       {children}
     </>
+  );
+}
+
+/** Dollars beside the contract. Editors show on venue and catering lines, and wherever a percent is already set. */
+function ServiceChargeCell({
+  line,
+  onSave,
+}: {
+  line: BudgetLine;
+  onSave: (patch: Partial<BudgetLine>) => void;
+}) {
+  const show = line.category === "Venue & catering" || line.serviceChargePct != null || line.taxPct != null;
+  if (!show) return <span className="text-muted-foreground">—</span>;
+  const base = line.actual ?? line.estimate;
+  const addOn = serviceChargeAndTax(base, line.serviceChargePct, line.taxPct).addOn;
+  const name = line.description || "line";
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <span className="tabular-nums">{money(addOn)}</span>
+      <span className="flex items-center justify-end gap-1">
+        <CellPercent
+          ariaLabel={`Service charge percent for ${name}`}
+          value={line.serviceChargePct}
+          onCommit={(v) => onSave({ serviceChargePct: v })}
+          className="h-7 w-12 px-1 text-xs"
+        />
+        <span className="text-xs text-muted-foreground">svc</span>
+        <CellPercent
+          ariaLabel={`Sales tax percent for ${name}`}
+          value={line.taxPct}
+          onCommit={(v) => onSave({ taxPct: v })}
+          className="h-7 w-12 px-1 text-xs"
+        />
+        <span className="text-xs text-muted-foreground">tax</span>
+      </span>
+    </div>
   );
 }
 

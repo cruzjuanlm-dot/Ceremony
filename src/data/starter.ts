@@ -57,6 +57,9 @@ export function starterBudgetLines(target: number | null, plan: Plan): Omit<Budg
     actual: null,
     bookingId: null,
     paidBy: "couple" as const,
+    // Percents stay blank until a contract names them. Blank is not zero.
+    serviceChargePct: null,
+    taxPct: null,
   }));
   if (target == null) return rows;
   const amounts = STARTER_BUDGET.map((row) => Math.round((target * row.shareBps) / 10000));

@@ -11,14 +11,104 @@ import type { BudgetLine, Booking, FeeTerms, Guest, Payment } from "~/data/types
  *  - Outgoing payments are cash leaving for vendors. Incoming payments (Pro only) are
  *    the planner's own fee installments. The two are never netted together, because they
  *    belong to different businesses: the couple's wedding and the planner's company.
+ *  - A service charge (often 18–22% at a venue or caterer) plus sales tax sits ON TOP of
+ *    the contract. It is not a tip. Tips stay on Gratuities lines. Budget totals include
+ *    the charge; `lineProjected` stays the contract before it.
  */
 
 export const lineProjected = (l: BudgetLine): number => l.actual ?? l.estimate ?? 0;
 
+export interface ServiceChargeBreakdown {
+  /** Dollars of service charge. Null when the base or the percent is blank. */
+  serviceCharge: number | null;
+  /** Dollars of sales tax. Null when the base or the tax percent is blank. */
+  tax: number | null;
+  /** Service charge plus tax, when at least one is known. Null when both are blank. */
+  addOn: number | null;
+  /** Base plus the add-on. Null when the base is blank. */
+  total: number | null;
+}
+
+/**
+ * Service charge and sales tax on a vendor contract.
+ *
+ * The service charge is a percent of `base` (the contract before those add-ons).
+ * Sales tax is a percent of the base plus that charge, because a mandatory service
+ * charge is part of the bill. When only tax is set, tax applies to the base alone.
+ * A blank base or a blank percent stays blank. Zero is a real amount. Whole dollars.
+ * This is not a gratuity — use `suggestedTip` for an envelope.
+ */
+export function serviceChargeAndTax(
+  base: number | null,
+  serviceChargePct: number | null,
+  taxPct: number | null,
+): ServiceChargeBreakdown {
+  if (base == null) return { serviceCharge: null, tax: null, addOn: null, total: null };
+  const serviceCharge = serviceChargePct == null ? null : Math.round((base * serviceChargePct) / 100);
+  const taxable = base + (serviceCharge ?? 0);
+  const tax = taxPct == null ? null : Math.round((taxable * taxPct) / 100);
+  const addOn = sumKnown([serviceCharge, tax]);
+  return { serviceCharge, tax, addOn, total: base + (addOn ?? 0) };
+}
+
+/**
+ * Split an all-in figure into the contract base and the total after service charge and tax.
+ * The total is whole dollars and within $1 of `allIn` (two roundings cannot always hit exactly).
+ * Both percents blank returns the figure unchanged.
+ */
+export function splitContract(
+  allIn: number,
+  serviceChargePct: number | null,
+  taxPct: number | null,
+): { base: number; total: number } {
+  if (serviceChargePct == null && taxPct == null) return { base: allIn, total: allIn };
+  const base = contractBase(allIn, serviceChargePct ?? 0, taxPct ?? 0);
+  const total = serviceChargeAndTax(base, serviceChargePct, taxPct).total ?? base;
+  return { base, total };
+}
+
+/** Base whose rounded charge lands closest to `allIn`. */
+function contractBase(allIn: number, serviceChargePct: number, taxPct: number): number {
+  const factor = (1 + serviceChargePct / 100) * (1 + taxPct / 100);
+  if (!(factor > 0)) return Math.round(allIn);
+  const guess = Math.round(allIn / factor);
+  let best = guess;
+  let bestGap = Infinity;
+  for (let delta = -12; delta <= 12; delta++) {
+    const candidate = guess + delta;
+    const total = serviceChargeAndTax(candidate, serviceChargePct, taxPct).total ?? candidate;
+    const gap = Math.abs(total - allIn);
+    if (gap < bestGap) {
+      best = candidate;
+      bestGap = gap;
+    }
+  }
+  return best;
+}
+
+function priced(l: BudgetLine, base: number | null): { contract: number; allIn: number; addOn: number } {
+  if (base == null) return { contract: 0, allIn: 0, addOn: 0 };
+  const charge = serviceChargeAndTax(base, l.serviceChargePct, l.taxPct);
+  return { contract: base, allIn: charge.total ?? base, addOn: charge.addOn ?? 0 };
+}
+
 export interface BudgetSummary {
+  /** All-in estimate: contract plus service charge and tax. */
   estimate: number;
+  /** All-in actual, for lines that have an actual. */
   actual: number;
+  /** All-in projected (actual where it exists, else the estimate), including the charge. */
   projected: number;
+  /** Contract estimates before service charge and tax. */
+  contractEstimate: number;
+  /** Contract actuals before service charge and tax. */
+  contractActual: number;
+  /** Contract projected: actual where it exists, otherwise the estimate. No service or tax. */
+  contractProjected: number;
+  /** Service charge plus tax on the projected contract. */
+  serviceAndTax: number;
+  /** True when any line has a service or tax percent. Zero is then a real amount. */
+  chargesKnown: boolean;
   target: number;
   /** target − projected. Negative = over budget. */
   remaining: number;
@@ -29,28 +119,78 @@ export function budgetSummary(lines: BudgetLine[], target: number): BudgetSummar
   let estimate = 0;
   let actual = 0;
   let projected = 0;
+  let contractEstimate = 0;
+  let contractActual = 0;
+  let contractProjected = 0;
+  let serviceAndTax = 0;
+  let chargesKnown = false;
   for (const l of lines) {
-    estimate += l.estimate ?? 0;
-    actual += l.actual ?? 0;
-    projected += lineProjected(l);
+    const est = priced(l, l.estimate);
+    const act = priced(l, l.actual);
+    const proj = priced(l, l.actual ?? l.estimate);
+    estimate += est.allIn;
+    actual += act.allIn;
+    projected += proj.allIn;
+    contractEstimate += est.contract;
+    contractActual += act.contract;
+    contractProjected += proj.contract;
+    serviceAndTax += proj.addOn;
+    if (l.serviceChargePct != null || l.taxPct != null) chargesKnown = true;
   }
   return {
     estimate,
     actual,
     projected,
+    contractEstimate,
+    contractActual,
+    contractProjected,
+    serviceAndTax,
+    chargesKnown,
     target,
     remaining: target - projected,
     overBudget: projected > target,
   };
 }
 
-export function budgetByCategory(lines: BudgetLine[]) {
-  const map = new Map<string, { category: string; estimate: number; actual: number; projected: number; count: number }>();
+export interface CategoryBudget {
+  category: string;
+  estimate: number;
+  actual: number;
+  projected: number;
+  contractEstimate: number;
+  contractActual: number;
+  contractProjected: number;
+  serviceAndTax: number;
+  chargesKnown: boolean;
+  count: number;
+}
+
+export function budgetByCategory(lines: BudgetLine[]): CategoryBudget[] {
+  const map = new Map<string, CategoryBudget>();
   for (const l of lines) {
-    const row = map.get(l.category) ?? { category: l.category, estimate: 0, actual: 0, projected: 0, count: 0 };
-    row.estimate += l.estimate ?? 0;
-    row.actual += l.actual ?? 0;
-    row.projected += lineProjected(l);
+    const row = map.get(l.category) ?? {
+      category: l.category,
+      estimate: 0,
+      actual: 0,
+      projected: 0,
+      contractEstimate: 0,
+      contractActual: 0,
+      contractProjected: 0,
+      serviceAndTax: 0,
+      chargesKnown: false,
+      count: 0,
+    };
+    const est = priced(l, l.estimate);
+    const act = priced(l, l.actual);
+    const proj = priced(l, l.actual ?? l.estimate);
+    row.estimate += est.allIn;
+    row.actual += act.allIn;
+    row.projected += proj.allIn;
+    row.contractEstimate += est.contract;
+    row.contractActual += act.contract;
+    row.contractProjected += proj.contract;
+    row.serviceAndTax += proj.addOn;
+    if (l.serviceChargePct != null || l.taxPct != null) row.chargesKnown = true;
     row.count++;
     map.set(l.category, row);
   }
@@ -260,6 +400,7 @@ export function planningEstimateUpdate(
  * Estimate − projected: positive = under the estimate, negative = over. Lines without an
  * actual have no variance yet (projected falls back to the estimate).
  */
+/** Estimate − actual on the contract itself. Service charge and tax stay in their own column. */
 export const lineVariance = (l: BudgetLine): number | null =>
   l.actual == null ? null : (l.estimate ?? 0) - lineProjected(l);
 

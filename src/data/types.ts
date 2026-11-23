@@ -165,6 +165,16 @@ export interface BudgetLine {
   bookingId: string | null;
   /** Who's paying — common for parents/padrinos to cover specific items. */
   paidBy: "couple" | "family" | "other";
+  /**
+   * Mandatory service charge on this contract, as a percent (20 means 20%).
+   * Typical for a venue or caterer, about 18–22. Not a tip. Null means none is set.
+   */
+  serviceChargePct: number | null;
+  /**
+   * Sales tax percent. Applied to the contract plus the service charge.
+   * Null means tax is not set. Blank is not zero.
+   */
+  taxPct: number | null;
 }
 
 /** Who physically hands over a tip envelope. */

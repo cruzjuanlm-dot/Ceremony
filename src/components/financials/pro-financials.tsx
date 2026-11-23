@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@libretto-ui/table";
 
 import { CoupleName, EmptyState, StatTile, toneText } from "~/components/kit";
+import { PhoneScrollHint } from "~/components/phone-scroll-hint";
 import { PaymentChip } from "~/components/status";
 import { useRows } from "~/data/hooks";
 import type { Payment } from "~/data/types";
@@ -159,7 +160,8 @@ export function ProFinancials() {
         <EmptyState title={lens === "overdue" ? "Nothing overdue" : "No payments here"} className="mb-8" />
       ) : (
         <div className="mb-10">
-          <Table>
+          <PhoneScrollHint>
+          <Table className="min-w-[48rem]">
             <TableHeader>
               <TableRow>
                 <TableHead>{ledger === "income" ? "Client" : "Wedding"}</TableHead>
@@ -217,6 +219,7 @@ export function ProFinancials() {
               </TableRow>
             </TableFooter>
           </Table>
+          </PhoneScrollHint>
         </div>
       )}
 
