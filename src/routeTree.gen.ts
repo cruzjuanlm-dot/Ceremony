@@ -20,6 +20,7 @@ import { Route as AppInboxRouteImport } from './routes/_app/inbox'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppStudioRouteImport } from './routes/_app/studio'
 import { Route as AppVendorsRouteImport } from './routes/_app/vendors'
+import { Route as PortalTokenRouteImport } from './routes/portal.$token'
 import { Route as AppWeddingsIndexRouteImport } from './routes/_app/weddings.index'
 import { Route as AppWeddingsWeddingIdRouteImport } from './routes/_app/weddings.$weddingId'
 
@@ -77,6 +78,11 @@ const AppVendorsRoute = AppVendorsRouteImport.update({
   path: '/vendors',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const PortalTokenRoute = PortalTokenRouteImport.update({
+  id: '/portal/$token',
+  path: '/portal/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppWeddingsIndexRoute = AppWeddingsIndexRouteImport.update({
   id: '/weddings/',
   path: '/weddings/',
@@ -99,6 +105,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRoute
   '/studio': typeof AppStudioRoute
   '/vendors': typeof AppVendorsRoute
+  '/portal/$token': typeof PortalTokenRoute
   '/weddings/$weddingId': typeof AppWeddingsWeddingIdRoute
   '/weddings/': typeof AppWeddingsIndexRoute
 }
@@ -113,6 +120,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/studio': typeof AppStudioRoute
   '/vendors': typeof AppVendorsRoute
+  '/portal/$token': typeof PortalTokenRoute
   '/weddings/$weddingId': typeof AppWeddingsWeddingIdRoute
   '/weddings': typeof AppWeddingsIndexRoute
 }
@@ -129,6 +137,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/_app/studio': typeof AppStudioRoute
   '/_app/vendors': typeof AppVendorsRoute
+  '/portal/$token': typeof PortalTokenRoute
   '/_app/weddings/$weddingId': typeof AppWeddingsWeddingIdRoute
   '/_app/weddings/': typeof AppWeddingsIndexRoute
 }
@@ -145,6 +154,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/studio'
     | '/vendors'
+    | '/portal/$token'
     | '/weddings/$weddingId'
     | '/weddings/'
   fileRoutesByTo: FileRoutesByTo
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/studio'
     | '/vendors'
+    | '/portal/$token'
     | '/weddings/$weddingId'
     | '/weddings'
   id:
@@ -174,6 +185,7 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_app/studio'
     | '/_app/vendors'
+    | '/portal/$token'
     | '/_app/weddings/$weddingId'
     | '/_app/weddings/'
   fileRoutesById: FileRoutesById
@@ -181,6 +193,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRouteRoute: typeof AppRouteRouteWithChildren
+  PortalTokenRoute: typeof PortalTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -262,6 +275,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppVendorsRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/portal/$token': {
+      id: '/portal/$token'
+      path: '/portal/$token'
+      fullPath: '/portal/$token'
+      preLoaderRoute: typeof PortalTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/weddings/': {
       id: '/_app/weddings/'
       path: '/weddings'
@@ -314,6 +334,7 @@ const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRouteRoute: AppRouteRouteWithChildren,
+  PortalTokenRoute: PortalTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

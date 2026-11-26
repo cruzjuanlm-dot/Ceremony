@@ -359,6 +359,26 @@ export type DocumentKind =
   | "other";
 export type DocumentStatus = "draft" | "sent" | "signed" | "paid" | "expired" | "filed";
 
+/**
+ * Sections a planner can show the couple. The overview (date, place, rain plan) stays
+ * available whenever the view is on — it is the plan, not a module.
+ */
+export const PORTAL_MODULES = ["timeline", "tasks", "files", "budget", "payments", "vendors", "guests"] as const;
+export type PortalModule = (typeof PORTAL_MODULES)[number];
+
+/**
+ * One wedding's read-only couple view. The token is a demo id stored in this browser.
+ * It is not a login, and the link does not work on another device.
+ */
+export interface PortalShare {
+  id: string;
+  weddingId: string;
+  token: string;
+  /** The planner can hide the whole view without losing which sections were on. */
+  enabled: boolean;
+  visible: PortalModule[];
+}
+
 export interface DocumentRecord {
   id: string;
   weddingId: string | null;
@@ -391,6 +411,7 @@ export interface Tables {
   appointments: Appointment;
   emails: Email;
   documents: DocumentRecord;
+  portalShares: PortalShare;
 }
 
 export type TableName = keyof Tables;
