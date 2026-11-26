@@ -15,6 +15,54 @@ import { parseAmount } from "./wedding-helpers";
  * outside the doorway.
  */
 
+/** Percent cell: "20" at rest, blank stays blank. The caller draws the % sign. */
+export function CellPercent({
+  value,
+  onCommit,
+  ariaLabel,
+  className,
+}: {
+  value: number | null;
+  onCommit: (v: number | null) => void;
+  ariaLabel: string;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const cancelled = useRef(false);
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      aria-label={ariaLabel}
+      value={draft ?? (value == null ? "" : String(value))}
+      onFocus={(e) => {
+        setDraft(value == null ? "" : String(value));
+        requestAnimationFrame(() => e.target.select());
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const d = draft;
+        setDraft(null);
+        if (cancelled.current) {
+          cancelled.current = false;
+          return;
+        }
+        if (d == null) return;
+        const next = parseAmount(d.replace("%", ""));
+        if (next !== value) onCommit(next);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") {
+          cancelled.current = true;
+          e.currentTarget.blur();
+        }
+      }}
+      className={cn(cellControlClass, "text-right tabular-nums", className)}
+    />
+  );
+}
+
 /** Money cell: "$1,200" at rest, the raw number while focused. Blank stays blank. */
 export function CellAmount({
   value,

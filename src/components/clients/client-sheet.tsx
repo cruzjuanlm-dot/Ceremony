@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AddPaymentButton } from "~/components/financials/add-payment-dialog";
 import { MarkPaidButton } from "~/components/financials/mark-paid-button";
 import { CoupleName, toneText } from "~/components/kit";
+import { PhoneScrollHint } from "~/components/phone-scroll-hint";
 import { ClientStatusChip, PaymentChip, PhaseChip } from "~/components/status";
 import { InlineNotes, InlineSelect, InlineText } from "~/components/vendors/inline-field";
 import { useRows, useUpdate } from "~/data/hooks";
@@ -147,8 +148,8 @@ function ClientDetail({ client }: { client: Client }) {
                   </span>
                 )}
               </div>
-              <div className="overflow-x-auto">
-              <Table>
+              <PhoneScrollHint>
+              <Table className="min-w-[32rem]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Installment</TableHead>
@@ -174,7 +175,7 @@ function ClientDetail({ client }: { client: Client }) {
                   ))}
                 </TableBody>
               </Table>
-              </div>
+              </PhoneScrollHint>
             </>
           )}
         </section>

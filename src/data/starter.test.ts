@@ -18,6 +18,7 @@ test("starter budget shares are the research table and land on the app's categor
 
   const blank = starterBudgetLines(null, "pro");
   expect(blank.every((l) => l.estimate == null && l.actual == null)).toBe(true);
+  expect(blank.every((l) => l.serviceChargePct == null && l.taxPct == null)).toBe(true);
 });
 
 test("checklist dates are offsets from the wedding, with PR and Catholic tasks only when they apply", () => {

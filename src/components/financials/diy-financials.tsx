@@ -5,6 +5,7 @@ import { Button } from "@libretto-ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@libretto-ui/table";
 
 import { EmptyState, Meter, Panel, StatTile, toneText } from "~/components/kit";
+import { PhoneScrollHint } from "~/components/phone-scroll-hint";
 import { PaymentChip } from "~/components/status";
 import { useRows } from "~/data/hooks";
 import type { BudgetLine, Payment, Wedding } from "~/data/types";
@@ -117,7 +118,8 @@ function DiyBody({ wedding: w }: { wedding: Wedding }) {
         </EmptyState>
       ) : (
         <div className="mb-8">
-          <Table>
+          <PhoneScrollHint>
+          <Table className="min-w-[40rem]">
             <TableHeader>
               <TableRow>
                 <TableHead>Vendor</TableHead>
@@ -150,6 +152,7 @@ function DiyBody({ wedding: w }: { wedding: Wedding }) {
               })}
             </TableBody>
           </Table>
+          </PhoneScrollHint>
         </div>
       )}
 

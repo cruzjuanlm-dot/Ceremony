@@ -24,7 +24,8 @@ import type {
   VendorCategory,
   Wedding,
 } from "./types";
-import { plannerFee, splitAmount, suggestedTip } from "~/lib/finance";
+import { plannerFee, splitAmount, splitContract, suggestedTip } from "~/lib/finance";
+import { jurisdictionOf } from "~/lib/wedding";
 
 /**
  * Demo seed. Every date is an OFFSET from "today" (the moment the dataset is first created),
@@ -239,6 +240,23 @@ const DEFAULT_PLAN: [string, number, number | "signing"][] = [
   ["Final balance", 0.25, 14],
 ];
 
+/**
+ * Venue and catering contracts carry a service charge (research §1.8, about 18–22%)
+ * and sales tax. Puerto Rico's IVU is 11.5%. Florida uses a typical combined 7%.
+ * This is not a gratuity.
+ */
+function contractCharge(
+  description: string,
+  city: string,
+): { serviceChargePct: number; taxPct: number | null } | null {
+  if (description !== "Venue rental" && description !== "Catering & bar") return null;
+  const place = jurisdictionOf(city);
+  return {
+    serviceChargePct: description === "Catering & bar" ? 20 : 18,
+    taxPct: place === "FL" ? 7 : place === "PR" ? 11.5 : null,
+  };
+}
+
 const LINE_VENDOR: Record<string, VendorCategory> = {
   "Venue rental": "venue",
   "Catering & bar": "catering",
@@ -430,15 +448,30 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
         const agreed = spec.client && (spec.client.status === "booked" || spec.client.status === "completed");
         const fee = spec.client ? plannerFee(spec.client, spec.wedding.budgetTarget) : null;
         if (planningLine && plan === "pro" && fee != null) estimate = fee;
+        // The category share is the couple's all-in number. Venue and catering contracts
+        // are stored as the base, with service charge and tax beside them, so the total
+        // stays the share. The charge is not a tip.
+        const charge = contractCharge(desc, spec.wedding.city);
+        const plannedAllIn = estimate;
+        if (charge) estimate = splitContract(plannedAllIn, charge.serviceChargePct, charge.taxPct).base;
         const vCat = LINE_VENDOR[desc];
         const booking = vCat ? bookingByCat.get(vCat) : undefined;
         let actual: number | null = null;
         if (booking && (booking.stage === "booked" || booking.stage === "quoted")) {
-          const amount = round50(estimate * (0.84 + rand() * 0.26));
-          booking.amount = amount;
-          if (booking.stage === "booked") actual = amount;
+          const quotedAllIn = round50(plannedAllIn * (0.84 + rand() * 0.26));
+          if (charge) {
+            const split = splitContract(quotedAllIn, charge.serviceChargePct, charge.taxPct);
+            booking.amount = split.total;
+            if (booking.stage === "booked") actual = split.base;
+          } else {
+            booking.amount = quotedAllIn;
+            if (booking.stage === "booked") actual = quotedAllIn;
+          }
         }
-        if (!booking && daysOut < 0) actual = round50(estimate * (0.9 + rand() * 0.2));
+        if (!booking && daysOut < 0) {
+          const spent = round50(plannedAllIn * (0.9 + rand() * 0.2));
+          actual = charge ? splitContract(spent, charge.serviceChargePct, charge.taxPct).base : spent;
+        }
         if (desc === "Wedding attire" && daysOut < 190) actual = round50(estimate * (0.95 + rand() * 0.25));
         if (desc === "Wedding bands" && daysOut < 70) actual = round50(estimate * (0.9 + rand() * 0.3));
         if (planningLine && plan === "pro" && fee != null && agreed) actual = fee;
@@ -451,6 +484,8 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
           actual,
           bookingId: booking?.id ?? null,
           paidBy: desc === "Catering & bar" && spec.wedding.ceremonyType === "catholic" ? "family" : "couple",
+          serviceChargePct: charge?.serviceChargePct ?? null,
+          taxPct: charge?.taxPct ?? null,
         });
       }
     }
@@ -510,6 +545,8 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
         actual: handed ? tip : null,
         bookingId: null,
         paidBy: "couple",
+        serviceChargePct: null,
+        taxPct: null,
       });
       const envelope: Gratuity = {
         id: id("tip"),
