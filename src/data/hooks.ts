@@ -56,6 +56,15 @@ export function useInsert<K extends TableName>(table: K) {
   });
 }
 
+export function useInsertMany<K extends TableName>(table: K) {
+  const invalidate = useInvalidate(table);
+  return useMutation({
+    mutationFn: (rows: (Omit<Tables[K], "id"> & { id?: string })[]) => store.insertMany(table, rows),
+    onSuccess: invalidate,
+    onError,
+  });
+}
+
 export function useUpdate<K extends TableName>(table: K) {
   const invalidate = useInvalidate(table);
   return useMutation({

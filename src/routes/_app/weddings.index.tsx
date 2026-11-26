@@ -29,8 +29,9 @@ function WeddingsPage() {
   const navigate = useNavigate();
   const [lens, setLens] = useState<Lens>("upcoming");
 
-  // A DIY workspace IS one wedding — the list would be a list of one.
-  if (ws.plan === "diy" && weddings[0]) {
+  // A DIY workspace with one wedding opens it directly. Zero weddings (or a second
+  // one just added) stay on this list so New wedding is reachable.
+  if (ws.plan === "diy" && weddings.length === 1 && weddings[0]) {
     return <Navigate to="/weddings/$weddingId" params={{ weddingId: weddings[0].id }} replace />;
   }
 

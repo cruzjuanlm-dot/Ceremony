@@ -7,18 +7,24 @@ import { Input } from "@libretto-ui/input";
 import { Label } from "@libretto-ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@libretto-ui/select";
 
-import { useInsert, useWorkspace } from "~/data/hooks";
-import type { ServiceLevel } from "~/data/types";
+import { useInsert, useInsertMany, useWorkspace } from "~/data/hooks";
+import { writeStarter } from "~/data/starter";
+import type { FeeModel, ServiceLevel } from "~/data/types";
 import { todayIso } from "~/lib/finance";
-import { SERVICE_LEVEL_LABEL } from "~/lib/wedding";
+import { FEE_MODEL_LABEL, SERVICE_LEVEL_LABEL } from "~/lib/wedding";
 
 import { clientName } from "./client-stats";
+import { parseAmount } from "~/components/wedding/wedding-helpers";
 
 /** "New client" — the couple as the planner's customer; a wedding date also creates their wedding. */
 export function NewClientButton({ onCreated }: { onCreated?: (id: string) => void }) {
   const ws = useWorkspace();
   const insertClient = useInsert("clients");
   const insertWedding = useInsert("weddings");
+  const insertLines = useInsertMany("budgetLines");
+  const insertTasks = useInsertMany("tasks");
+  const insertTimeline = useInsertMany("timeline");
+  const insertPayments = useInsertMany("payments");
   const [open, setOpen] = useState(false);
   const blank = () => ({
     partner1: "",
@@ -26,7 +32,11 @@ export function NewClientButton({ onCreated }: { onCreated?: (id: string) => voi
     email: "",
     phone: "",
     serviceLevel: "full" as ServiceLevel,
-    planningFee: "",
+    feeModel: "flat" as FeeModel,
+    feeFlat: "",
+    feePercent: "",
+    feeHours: "",
+    feeRate: "",
     source: "",
     language: "es" as "en" | "es",
     weddingDate: "",
@@ -36,7 +46,13 @@ export function NewClientButton({ onCreated }: { onCreated?: (id: string) => voi
   const set = <K extends keyof ReturnType<typeof blank>>(k: K, v: ReturnType<typeof blank>[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
   const valid = form.partner1.trim().length > 0;
-  const pending = insertClient.isPending || insertWedding.isPending;
+  const pending =
+    insertClient.isPending ||
+    insertWedding.isPending ||
+    insertLines.isPending ||
+    insertTasks.isPending ||
+    insertTimeline.isPending ||
+    insertPayments.isPending;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,14 +65,18 @@ export function NewClientButton({ onCreated }: { onCreated?: (id: string) => voi
       phone: form.phone.trim(),
       status: "inquiry",
       serviceLevel: form.serviceLevel,
-      planningFee: Number(form.planningFee) || 0,
+      feeModel: form.feeModel,
+      feeFlat: form.feeModel === "flat" || form.feeModel === "hybrid" ? parseAmount(form.feeFlat) : null,
+      feePercent: form.feeModel === "percent" || form.feeModel === "hybrid" ? parseAmount(form.feePercent) : null,
+      feeHours: form.feeModel === "hourly" ? parseAmount(form.feeHours) : null,
+      feeRate: form.feeModel === "hourly" ? parseAmount(form.feeRate) : null,
       source: form.source.trim(),
       language: form.language,
       notes: "",
       createdAt: today,
     });
     if (form.weddingDate) {
-      await insertWedding.mutateAsync({
+      const w = await insertWedding.mutateAsync({
         clientId: c.id,
         title: clientName(c),
         date: form.weddingDate,
@@ -72,6 +92,12 @@ export function NewClientButton({ onCreated }: { onCreated?: (id: string) => voi
         importantNotes: "",
         rainPlan: "",
         createdAt: today,
+      });
+      await writeStarter(w, ws.plan, c, {
+        insertBudgetLines: (rows) => insertLines.mutateAsync(rows),
+        insertTasks: (rows) => insertTasks.mutateAsync(rows),
+        insertTimeline: (rows) => insertTimeline.mutateAsync(rows),
+        insertPayments: (rows) => insertPayments.mutateAsync(rows),
       });
     }
     setOpen(false);
@@ -130,9 +156,44 @@ export function NewClientButton({ onCreated }: { onCreated?: (id: string) => voi
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="nc-fee">Planning fee</Label>
-              <Input id="nc-fee" inputMode="numeric" placeholder="0" value={form.planningFee} onChange={(e) => set("planningFee", e.target.value)} />
+              <Label>Fee model</Label>
+              <Select value={form.feeModel} onValueChange={(v) => set("feeModel", v as FeeModel)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(FEE_MODEL_LABEL) as FeeModel[]).map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {FEE_MODEL_LABEL[k]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+            {(form.feeModel === "flat" || form.feeModel === "hybrid") && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="nc-fee">{form.feeModel === "hybrid" ? "Base fee" : "Flat fee"}</Label>
+                <Input id="nc-fee" inputMode="decimal" placeholder="—" value={form.feeFlat} onChange={(e) => set("feeFlat", e.target.value)} />
+              </div>
+            )}
+            {(form.feeModel === "percent" || form.feeModel === "hybrid") && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="nc-pct">Percent</Label>
+                <Input id="nc-pct" inputMode="decimal" placeholder="—" value={form.feePercent} onChange={(e) => set("feePercent", e.target.value)} />
+              </div>
+            )}
+            {form.feeModel === "hourly" && (
+              <>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="nc-hours">Hours</Label>
+                  <Input id="nc-hours" inputMode="decimal" placeholder="—" value={form.feeHours} onChange={(e) => set("feeHours", e.target.value)} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="nc-rate">Hourly rate</Label>
+                  <Input id="nc-rate" inputMode="decimal" placeholder="—" value={form.feeRate} onChange={(e) => set("feeRate", e.target.value)} />
+                </div>
+              </>
+            )}
             <div className="grid gap-1.5">
               <Label htmlFor="nc-source">Source</Label>
               <Input id="nc-source" placeholder="Instagram" value={form.source} onChange={(e) => set("source", e.target.value)} />

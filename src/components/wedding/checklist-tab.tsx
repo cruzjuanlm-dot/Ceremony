@@ -125,7 +125,7 @@ function PhaseGroup({
                 aria-label={t.done ? `Mark "${t.title}" not done` : `Mark "${t.title}" done`}
                 onCheckedChange={(v) => update.mutate({ id: t.id, patch: { done: v === true } })}
               />
-              <span className={cn("min-w-0 flex-1 truncate text-sm", t.done && "text-muted-foreground line-through")}>{t.title}</span>
+              <span className={cn("min-w-0 flex-1 whitespace-normal text-sm", t.done && "text-muted-foreground line-through")}>{t.title}</span>
               {showOwner && (
                 <Chip tone={OWNER_TONE[t.owner]} className="hidden sm:inline-flex">
                   {OWNER_LABEL[t.owner]}

@@ -5,6 +5,7 @@ import type {
   ClientStatus,
   DocumentKind,
   DocumentStatus,
+  FeeModel,
   MealChoice,
   ServiceLevel,
   TimelineSegment,
@@ -99,6 +100,22 @@ export const SERVICE_LEVEL_LABEL: Record<ServiceLevel, string> = {
   partial: "Partial planning",
   day_of: "Day-of coordination",
 };
+
+export const FEE_MODEL_LABEL: Record<FeeModel, string> = {
+  flat: "Flat",
+  percent: "Percent of budget",
+  hybrid: "Hybrid",
+  hourly: "Hourly",
+};
+
+/** City string → PR or FL, the two jurisdictions the research covers. */
+export type Jurisdiction = "PR" | "FL";
+
+export function jurisdictionOf(city: string): Jurisdiction | null {
+  if (/\bPR\b|puerto rico/i.test(city)) return "PR";
+  if (/\bFL\b|florida/i.test(city)) return "FL";
+  return null;
+}
 
 export const CEREMONY_LABEL: Record<CeremonyType, string> = {
   catholic: "Catholic",

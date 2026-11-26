@@ -53,11 +53,12 @@ interface NavItem {
  * two plans: DIY couples own ONE wedding, so "Weddings" collapses to "Our wedding" and
  * Clients disappears — a couple has no clients.
  */
-function useNav(plan: Plan): { work: NavItem[]; tools: NavItem[] } {
+function useNav(plan: Plan, pathname: string): { work: NavItem[]; tools: NavItem[] } {
   const weddings = useRows("weddings");
   const emails = useRows("emails");
   const unread = emails.filter((e) => !e.read && e.direction === "in").length;
-  const own = weddings[0];
+  const openId = pathname.match(/\/weddings\/([^/]+)/)?.[1];
+  const own = weddings.find((w) => w.id === openId) ?? weddings[0];
 
   const work: NavItem[] =
     plan === "pro"
@@ -120,7 +121,7 @@ function NavGroup({ label, items, pathname }: { label: string; items: NavItem[];
 function AppLayout() {
   const ws = useWorkspace();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { work, tools } = useNav(ws.plan);
+  const { work, tools } = useNav(ws.plan, pathname);
   const demo = useDemoControls();
 
   return (

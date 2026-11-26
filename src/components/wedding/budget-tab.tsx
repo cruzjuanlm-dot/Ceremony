@@ -14,7 +14,10 @@ import {
   TableShell,
 } from "@libretto-ui/table";
 
-import { EmptyState, StatTile } from "~/components/kit";
+import { FeeTermsEditor } from "~/components/clients/fee-terms";
+import { useSaveFee } from "~/components/clients/follow-fee";
+import { EmptyState, StatTile, toneText } from "~/components/kit";
+import { AddPaymentButton } from "~/components/financials/add-payment-dialog";
 import { PaymentChip } from "~/components/status";
 import { useInsert, useRemove, useRows, useUpdate, useWeddingRows, useWorkspace } from "~/data/hooks";
 import type { BudgetCategory, BudgetLine, Payment, Wedding } from "~/data/types";
@@ -23,6 +26,8 @@ import {
   budgetSummary,
   paymentState,
   paymentTotals,
+  plannerFee,
+  sumKnown,
   todayIso,
 } from "~/lib/finance";
 import { dateShort, money, pct } from "~/lib/format";
@@ -66,6 +71,9 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
   const insertLine = useInsert("budgetLines");
   const removeLine = useRemove("budgetLines");
   const updatePayment = useUpdate("payments");
+  const saveFee = useSaveFee();
+  const clients = useRows("clients");
+  const client = w.clientId ? (clients.find((c) => c.id === w.clientId) ?? null) : null;
   const [newCategory, setNewCategory] = useState<BudgetCategory>("Other");
 
   const summary = budgetSummary(lines, w.budgetTarget);
@@ -77,6 +85,9 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
   const incoming = payments.filter((p) => p.direction === "incoming").sort(byDue);
   const out = paymentTotals(outgoing, today);
   const fee = paymentTotals(incoming, today);
+  const quote = client ? plannerFee(client, w.budgetTarget) : null;
+  const scheduledFee = sumKnown(incoming.map((p) => p.amount));
+  const feeMismatch = quote != null && scheduledFee != null && scheduledFee !== quote;
 
   const groups = BUDGET_CATEGORIES.map((category) => ({
     category,
@@ -224,7 +235,7 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
               <TableRow>
                 <TableCell colSpan={2}>Total</TableCell>
                 <TableCell numeric>{money(summary.estimate)}</TableCell>
-                <TableCell numeric>{money(summary.actual)}</TableCell>
+                <TableCell numeric>{money(sumKnown(lines.map((l) => l.actual)))}</TableCell>
                 <TableCell numeric>
                   <Variance value={summary.actual ? summary.estimate - summary.projected : null} />
                 </TableCell>
@@ -244,33 +255,47 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
           {outgoing.length === 0 ? (
             <p className="text-sm text-muted-foreground">No vendor payments scheduled yet.</p>
           ) : (
-            <PaymentsTable
-              rows={outgoing}
-              today={today}
-              who={(p) => vendorFor(p)?.name ?? "—"}
-              whoLabel="Vendor"
-              onMarkPaid={markPaid}
-            />
+            <div className="overflow-x-auto">
+              <PaymentsTable
+                rows={outgoing}
+                today={today}
+                who={(p) => vendorFor(p)?.name ?? "—"}
+                whoLabel="Vendor"
+                onMarkPaid={markPaid}
+              />
+            </div>
           )}
       </TableShell>
 
       {ws.plan === "pro" && (
-        <TableShell
-          header={
-            <>
-              <h2 className="text-sm font-semibold">Our fee</h2>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {money(fee.paid)} received · {money(fee.outstanding)} outstanding
-              </span>
-            </>
-          }
-        >
+        <section className="grid min-w-0 gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Our fee</h2>
+            <div className="flex flex-wrap items-center gap-3">
+              {incoming.length > 0 && (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {money(fee.paid)} received · {money(fee.outstanding)} outstanding
+                </span>
+              )}
+              <AddPaymentButton defaultDirection="incoming" weddingId={w.id} variant="outline" />
+            </div>
+          </div>
+          {client && (
+            <div className="max-w-md">
+              <FeeTermsEditor client={client} quote={quote} onCommit={(patch) => void saveFee(client, patch)} />
+              {feeMismatch && (
+                <p className={cn("mt-2 text-xs", toneText("warn"))}>Installments total {money(scheduledFee)}.</p>
+              )}
+            </div>
+          )}
           {incoming.length === 0 ? (
             <p className="text-sm text-muted-foreground">No fee installments scheduled.</p>
           ) : (
-            <PaymentsTable rows={incoming} today={today} onMarkPaid={markPaid} />
+            <div className="overflow-x-auto">
+              <PaymentsTable rows={incoming} today={today} onMarkPaid={markPaid} />
+            </div>
           )}
-        </TableShell>
+        </section>
       )}
     </div>
   );
