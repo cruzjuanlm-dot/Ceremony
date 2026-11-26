@@ -1,6 +1,7 @@
 import type {
   AppointmentKind,
   BookingStage,
+  BudgetLine,
   CeremonyType,
   ClientStatus,
   DocumentKind,
@@ -8,6 +9,7 @@ import type {
   FeeModel,
   MealChoice,
   ServiceLevel,
+  SubEventKind,
   TimelineSegment,
   TipHandover,
   VendorCategory,
@@ -134,6 +136,61 @@ export const SEGMENT_LABEL: Record<TimelineSegment, string> = {
   reception: "Reception",
   after: "Send-off",
 };
+
+/** Weekend order, welcome through brunch. */
+export const SUB_EVENT_ORDER: readonly SubEventKind[] = [
+  "welcome",
+  "rehearsal",
+  "ceremony",
+  "cocktail",
+  "reception",
+  "after_party",
+  "brunch",
+];
+
+export const SUB_EVENT_LABEL: Record<SubEventKind, string> = {
+  welcome: "Welcome party",
+  rehearsal: "Rehearsal",
+  ceremony: "Ceremony",
+  cocktail: "Cocktail hour",
+  reception: "Reception",
+  after_party: "After-party",
+  brunch: "Brunch",
+};
+
+const RECEPTION_BUDGET = new Set(["Venue rental", "Catering & bar", "Wedding cake", "DJ / band"]);
+
+/** A budget line belongs to one part of the weekend only when the description already says so. */
+export function subEventKindForBudgetLine(line: Pick<BudgetLine, "category" | "description">): SubEventKind | null {
+  if (line.category === "Ceremony") return "ceremony";
+  if (RECEPTION_BUDGET.has(line.description)) return "reception";
+  return null;
+}
+
+/** Vendors whose work is one part of the day. Everyone else stays on the whole wedding. */
+export function subEventKindForVendor(category: VendorCategory): SubEventKind | null {
+  if (category === "officiant") return "ceremony";
+  if (category === "venue" || category === "catering" || category === "music" || category === "cake") return "reception";
+  return null;
+}
+
+/** Timeline segments that are themselves a sub-event. Getting ready and photos are not. */
+export function subEventKindForSegment(segment: TimelineSegment): SubEventKind | null {
+  if (segment === "ceremony") return "ceremony";
+  if (segment === "cocktail") return "cocktail";
+  if (segment === "reception") return "reception";
+  if (segment === "after") return "after_party";
+  return null;
+}
+
+/** First event of that kind. A line never points at two. */
+export function subEventIdForKind(
+  kind: SubEventKind | null,
+  events: readonly { id: string; kind: SubEventKind }[],
+): string | null {
+  if (!kind) return null;
+  return events.find((e) => e.kind === kind)?.id ?? null;
+}
 
 export const MEAL_LABEL: Record<MealChoice, string> = {
   beef: "Beef",

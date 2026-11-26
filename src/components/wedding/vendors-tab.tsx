@@ -17,13 +17,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyState } from "~/components/kit";
 import { StageChip } from "~/components/status";
 import { useInsert, useRows, useUpdate, useWeddingRows } from "~/data/hooks";
-import type { Booking, BookingStage, BudgetLine, Payment, Vendor, Wedding } from "~/data/types";
+import type { Booking, BookingStage, BudgetLine, Payment, SubEvent, Vendor, Wedding } from "~/data/types";
 import { bookingBalance } from "~/lib/finance";
 import { money, time12 } from "~/lib/format";
-import { STAGES, STAGE_LABEL, VENDOR_CATEGORY_LABEL } from "~/lib/wedding";
+import { STAGES, STAGE_LABEL, subEventIdForKind, subEventKindForVendor, VENDOR_CATEGORY_LABEL } from "~/lib/wedding";
 import { cn } from "~/shared/libretto";
 
 import { CellAmount, CellText, GhostSelect } from "./fields";
+import { matchesSubEvent, SubEventFilter, SubEventSelect } from "./sub-events";
 import { parseAmount, VENDOR_BUDGET_CATEGORY } from "./wedding-helpers";
 import { TipEnvelopes } from "./vendors/tip-envelopes";
 
@@ -32,13 +33,16 @@ const STAGE_OPTIONS = STAGES.map((s) => ({ value: s, label: STAGE_LABEL[s] }));
 
 export function VendorsTab({ wedding: w }: { wedding: Wedding }) {
   const bookings = useWeddingRows("bookings", w.id);
+  const subEvents = useWeddingRows("subEvents", w.id);
   const payments = useWeddingRows("payments", w.id);
   const lines = useWeddingRows("budgetLines", w.id);
   const vendors = useRows("vendors");
   const [showDeclined, setShowDeclined] = useState(false);
+  const [eventFilter, setEventFilter] = useState("all");
 
   const vendorOf = (b: Booking) => vendors.find((v) => v.id === b.vendorId);
-  const declined = bookings.filter((b) => b.stage === "declined");
+  const visible = bookings.filter((b) => matchesSubEvent(b.subEventId, eventFilter));
+  const declined = visible.filter((b) => b.stage === "declined");
 
   return (
     <div className="grid grid-cols-1 gap-8">
@@ -49,30 +53,36 @@ export function VendorsTab({ wedding: w }: { wedding: Wedding }) {
             · {bookings.filter((b) => b.stage === "booked").length} of {bookings.length - declined.length} booked
           </span>
         </h2>
-        <AddVendorButton wedding={w} vendors={vendors} bookings={bookings} />
+        <AddVendorButton wedding={w} vendors={vendors} bookings={bookings} subEvents={subEvents} eventFilter={eventFilter} />
       </div>
 
+      <SubEventFilter events={subEvents} value={eventFilter} onChange={setEventFilter} />
+
       {bookings.length === 0 ? (
-        <EmptyState title="No vendors yet" action={<AddVendorButton wedding={w} vendors={vendors} bookings={bookings} />}>
+        <EmptyState title="No vendors yet" action={<AddVendorButton wedding={w} vendors={vendors} bookings={bookings} subEvents={subEvents} eventFilter={eventFilter} />}>
           Add the venue first — most other vendors work around its date.
+        </EmptyState>
+      ) : visible.filter((b) => b.stage !== "declined").length === 0 && declined.length === 0 ? (
+        <EmptyState title="No vendors for this sub-event">
+          Set Event on a vendor under All, or add one while this filter is on.
         </EmptyState>
       ) : (
         <div className="grid grid-cols-1 gap-6">
-          {BOARD.filter((stage) => bookings.some((b) => b.stage === stage)).map((stage) => (
+          {BOARD.filter((stage) => visible.some((b) => b.stage === stage)).map((stage) => (
             <section key={stage} aria-label={STAGE_LABEL[stage]}>
               <div className="mb-2 flex items-center gap-2">
                 <StageChip stage={stage} />
                 <span className="text-xs tabular-nums text-muted-foreground">
-                  {bookings.filter((b) => b.stage === stage).length}
+                  {visible.filter((b) => b.stage === stage).length}
                 </span>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {bookings
+                {visible
                   .filter((b) => b.stage === stage)
                   .map((b) => {
                     const v = vendorOf(b);
                     return v ? (
-                      <BookingCard key={b.id} booking={b} vendor={v} payments={payments} lines={lines} wedding={w} />
+                      <BookingCard key={b.id} booking={b} vendor={v} payments={payments} lines={lines} wedding={w} subEvents={subEvents} />
                     ) : null;
                   })}
               </div>
@@ -96,7 +106,7 @@ export function VendorsTab({ wedding: w }: { wedding: Wedding }) {
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {declined.map((b) => {
                 const v = vendorOf(b);
-                return v ? <BookingCard key={b.id} booking={b} vendor={v} payments={payments} lines={lines} wedding={w} /> : null;
+                return v ? <BookingCard key={b.id} booking={b} vendor={v} payments={payments} lines={lines} wedding={w} subEvents={subEvents} /> : null;
               })}
             </div>
           )}
@@ -114,12 +124,14 @@ function BookingCard({
   payments,
   lines,
   wedding: w,
+  subEvents,
 }: {
   booking: Booking;
   vendor: Vendor;
   payments: Payment[];
   lines: BudgetLine[];
   wedding: Wedding;
+  subEvents: SubEvent[];
 }) {
   const update = useUpdate("bookings");
   const insertLine = useInsert("budgetLines");
@@ -141,7 +153,21 @@ function BookingCard({
       </div>
 
       <dl className="mt-2 grid grid-cols-[auto_1fr] items-center gap-x-3 text-xs">
-        <dt className="text-muted-foreground">{isBooked ? "Contract" : "Quote"}</dt>
+            {subEvents.length > 0 && (
+              <>
+                <dt className="text-muted-foreground">Event</dt>
+                <dd>
+                  <SubEventSelect
+                    events={subEvents}
+                    value={b.subEventId}
+                    ariaLabel={`${v.name} sub-event`}
+                    onChange={(subEventId) => save({ subEventId })}
+                    className="-ml-2 [&_select]:h-7 [&_select]:text-xs"
+                  />
+                </dd>
+              </>
+            )}
+            <dt className="text-muted-foreground">{isBooked ? "Contract" : "Quote"}</dt>
         <dd>
           <CellAmount
             ariaLabel={`${v.name} amount`}
@@ -202,6 +228,7 @@ function BookingCard({
                 estimate: b.amount,
                 actual: b.amount,
                 bookingId: b.id,
+                subEventId: b.subEventId,
                 paidBy: "couple",
                 serviceChargePct: null,
                 taxPct: null,
@@ -217,7 +244,19 @@ function BookingCard({
   );
 }
 
-function AddVendorButton({ wedding: w, vendors, bookings }: { wedding: Wedding; vendors: Vendor[]; bookings: Booking[] }) {
+function AddVendorButton({
+  wedding: w,
+  vendors,
+  bookings,
+  subEvents,
+  eventFilter,
+}: {
+  wedding: Wedding;
+  vendors: Vendor[];
+  bookings: Booking[];
+  subEvents: SubEvent[];
+  eventFilter: string;
+}) {
   const [open, setOpen] = useState(false);
   const insert = useInsert("bookings");
   const [vendorId, setVendorId] = useState("");
@@ -232,12 +271,15 @@ function AddVendorButton({ wedding: w, vendors, bookings }: { wedding: Wedding; 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!vendorId) return;
+    const vendor = vendors.find((v) => v.id === vendorId);
+    const fromFilter = eventFilter !== "all" && eventFilter !== "none" ? eventFilter : null;
     await insert.mutateAsync({
       weddingId: w.id,
       vendorId,
       stage,
       amount: parseAmount(amount),
       arrivalTime: null,
+      subEventId: fromFilter ?? (vendor ? subEventIdForKind(subEventKindForVendor(vendor.category), subEvents) : null),
       notes: "",
     });
     setOpen(false);

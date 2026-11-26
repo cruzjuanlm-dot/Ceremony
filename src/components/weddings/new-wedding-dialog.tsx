@@ -27,6 +27,7 @@ export function NewWeddingButton() {
   const ws = useWorkspace();
   const clients = useRows("clients");
   const insert = useInsert("weddings");
+  const insertSubEvents = useInsertMany("subEvents");
   const insertLines = useInsertMany("budgetLines");
   const insertTasks = useInsertMany("tasks");
   const insertTimeline = useInsertMany("timeline");
@@ -66,6 +67,7 @@ export function NewWeddingButton() {
     });
     const client = w.clientId ? (clients.find((c) => c.id === w.clientId) ?? null) : null;
     await writeStarter(w, ws.plan, client, {
+      insertSubEvents: (rows) => insertSubEvents.mutateAsync(rows),
       insertBudgetLines: (rows) => insertLines.mutateAsync(rows),
       insertTasks: (rows) => insertTasks.mutateAsync(rows),
       insertTimeline: (rows) => insertTimeline.mutateAsync(rows),

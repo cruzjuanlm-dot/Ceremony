@@ -8,15 +8,30 @@ import { Label } from "@libretto-ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@libretto-ui/select";
 
 import { useInsert } from "~/data/hooks";
-import type { TimelineSegment, Wedding } from "~/data/types";
-import { SEGMENT_LABEL } from "~/lib/wedding";
+import type { SubEvent, TimelineSegment, Wedding } from "~/data/types";
+import { SEGMENT_LABEL, subEventIdForKind, subEventKindForSegment } from "~/lib/wedding";
 
+import { SubEventSelect } from "../sub-events";
 import { DEFAULT_CEREMONY, SEGMENT_ORDER } from "./run-of-show";
 import { parseTime } from "./time";
 
-export function AddTimelineItemButton({ wedding }: { wedding: Wedding }) {
+export function AddTimelineItemButton({
+  wedding,
+  subEvents,
+  eventFilter = "all",
+}: {
+  wedding: Wedding;
+  subEvents: SubEvent[];
+  eventFilter?: string;
+}) {
   const [open, setOpen] = useState(false);
   const insert = useInsert("timeline");
+  const linked = (segment: TimelineSegment) =>
+    eventFilter === "none"
+      ? null
+      : eventFilter !== "all"
+        ? eventFilter
+        : subEventIdForKind(subEventKindForSegment(segment), subEvents);
   const blank = () => ({
     time: wedding.ceremonyTime ?? DEFAULT_CEREMONY,
     duration: "30",
@@ -24,6 +39,7 @@ export function AddTimelineItemButton({ wedding }: { wedding: Wedding }) {
     segment: "reception" as TimelineSegment,
     location: "",
     owner: "",
+    subEventId: linked("reception"),
   });
   const [form, setForm] = useState(blank);
   const set = <K extends keyof ReturnType<typeof blank>>(k: K, v: ReturnType<typeof blank>[K]) =>
@@ -42,6 +58,7 @@ export function AddTimelineItemButton({ wedding }: { wedding: Wedding }) {
       location: form.location.trim(),
       owner: form.owner.trim(),
       notes: "",
+      subEventId: form.subEventId,
     });
     setForm(blank());
     setOpen(false);
@@ -81,7 +98,17 @@ export function AddTimelineItemButton({ wedding }: { wedding: Wedding }) {
             </div>
             <div className="grid gap-1.5">
               <Label>Part</Label>
-              <Select value={form.segment} onValueChange={(v) => set("segment", v as TimelineSegment)}>
+              <Select
+                value={form.segment}
+                onValueChange={(v) => {
+                  const segment = v as TimelineSegment;
+                  setForm((f) => ({
+                    ...f,
+                    segment,
+                    subEventId: eventFilter === "all" ? subEventIdForKind(subEventKindForSegment(segment), subEvents) : f.subEventId,
+                  }));
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -105,6 +132,17 @@ export function AddTimelineItemButton({ wedding }: { wedding: Wedding }) {
               <Input id="at-who" value={form.owner} onChange={(e) => set("owner", e.target.value)} />
             </div>
           </div>
+          {subEvents.length > 0 && (
+            <div className="grid gap-1.5">
+              <Label>Sub-event</Label>
+              <SubEventSelect
+                events={subEvents}
+                value={form.subEventId}
+                ariaLabel="Sub-event"
+                onChange={(subEventId) => set("subEventId", subEventId)}
+              />
+            </div>
+          )}
           <DialogFooter>
             <Button type="submit" disabled={!form.title.trim() || !time || insert.isPending}>
               Add item

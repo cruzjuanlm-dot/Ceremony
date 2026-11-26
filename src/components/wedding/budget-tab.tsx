@@ -38,6 +38,7 @@ import { dateShort, money, pct } from "~/lib/format";
 import { cellActionClass, cn } from "~/shared/libretto";
 
 import { CellAmount, CellPercent, CellText, GhostSelect } from "./fields";
+import { matchesSubEvent, SubEventFilter, SubEventSelect } from "./sub-events";
 import { BUDGET_CATEGORIES } from "./wedding-helpers";
 
 const PAID_BY = [
@@ -67,6 +68,7 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
   const ws = useWorkspace();
   const today = todayIso();
   const lines = useWeddingRows("budgetLines", w.id);
+  const subEvents = useWeddingRows("subEvents", w.id);
   const payments = useWeddingRows("payments", w.id);
   const bookings = useWeddingRows("bookings", w.id);
   const vendors = useRows("vendors");
@@ -78,9 +80,9 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
   const clients = useRows("clients");
   const client = w.clientId ? (clients.find((c) => c.id === w.clientId) ?? null) : null;
   const [newCategory, setNewCategory] = useState<BudgetCategory>("Other");
+  const [eventFilter, setEventFilter] = useState("all");
 
   const summary = budgetSummary(lines, w.budgetTarget);
-  const byCat = budgetByCategory(lines);
   // Unpaid first (soonest due on top), then the paid history.
   const byDue = (a: Payment, b: Payment) =>
     Number(a.paidDate != null) - Number(b.paidDate != null) || a.dueDate.localeCompare(b.dueDate);
@@ -92,11 +94,15 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
   const scheduledFee = sumKnown(incoming.map((p) => p.amount));
   const feeMismatch = quote != null && scheduledFee != null && scheduledFee !== quote;
 
+  const shown = lines.filter((l) => matchesSubEvent(l.subEventId, eventFilter));
+  const tableSummary = budgetSummary(shown, w.budgetTarget);
+  const shownByCat = budgetByCategory(shown);
   const groups = BUDGET_CATEGORIES.map((category) => ({
     category,
-    lines: lines.filter((l) => l.category === category),
-    totals: byCat.find((c) => c.category === category),
+    lines: shown.filter((l) => l.category === category),
+    totals: shownByCat.find((c) => c.category === category),
   })).filter((g) => g.lines.length > 0);
+  const showEvent = subEvents.length > 0;
 
   const save = (id: string, patch: Partial<BudgetLine>) => updateLine.mutate({ id, patch });
   const addLine = (category: BudgetCategory) =>
@@ -107,6 +113,7 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
       estimate: null,
       actual: null,
       bookingId: null,
+      subEventId: eventFilter !== "all" && eventFilter !== "none" ? eventFilter : null,
       paidBy: "couple",
       serviceChargePct: null,
       taxPct: null,
@@ -116,7 +123,7 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
     const b = bookings.find((x) => x.id === p.bookingId);
     return b ? vendors.find((v) => v.id === b.vendorId) : undefined;
   };
-  const maxCat = byCat[0]?.projected ?? 0;
+  const maxCat = shownByCat[0]?.projected ?? 0;
   const paidByOptions = ws.plan === "diy" ? DIY_PAID_BY : PAID_BY;
 
   return (
@@ -150,7 +157,10 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
 
       <p className="-mt-4 text-xs text-muted-foreground">
         Venue and catering lines can add a service charge and sales tax beside the contract. That charge is not a tip.
+        {eventFilter !== "all" && " The tiles above are the whole wedding."}
       </p>
+
+      <SubEventFilter events={subEvents} value={eventFilter} onChange={setEventFilter} />
 
       <TableShell
         header={
@@ -173,14 +183,21 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
         }
       >
         {groups.length === 0 ? (
-          <EmptyState title="No budget lines yet" action={<Button onClick={() => addLine("Venue & catering")}>Add line</Button>}>
-            Start with the venue — it's usually the biggest line.
-          </EmptyState>
+          lines.length === 0 ? (
+            <EmptyState title="No budget lines yet" action={<Button onClick={() => addLine("Venue & catering")}>Add line</Button>}>
+              Start with the venue — it's usually the biggest line.
+            </EmptyState>
+          ) : (
+            <EmptyState title="Nothing for this sub-event" action={<Button onClick={() => addLine(newCategory)}>Add line</Button>}>
+              Add a line here, or set Event on a line under All.
+            </EmptyState>
+          )
         ) : (
           <PhoneScrollHint>
           <Table className="min-w-[760px]">
             <colgroup>
               <col />
+              {showEvent && <col className="w-36" />}
               <col className="w-28" />
               <col className="w-28" />
               <col className="w-28" />
@@ -191,6 +208,7 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Item</TableHead>
+                {showEvent && <TableHead>Event</TableHead>}
                 <TableHead>Paid by</TableHead>
                 <TableHead numeric>Estimate</TableHead>
                 <TableHead numeric>Actual</TableHead>
@@ -206,7 +224,7 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
             </TableHeader>
             <TableBody>
               {groups.map((g) => (
-                <BudgetGroup key={g.category} category={g.category} totals={g.totals}>
+                <BudgetGroup key={g.category} category={g.category} totals={g.totals} showEvent={showEvent}>
                   {g.lines.map((l) => (
                     <TableRow key={l.id}>
                       <TableCell className="py-1">
@@ -218,6 +236,17 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
                           className="-ml-2 min-w-48"
                         />
                       </TableCell>
+                      {showEvent && (
+                        <TableCell className="py-1">
+                          <SubEventSelect
+                            events={subEvents}
+                            value={l.subEventId}
+                            ariaLabel={`Sub-event for ${l.description || "line"}`}
+                            onChange={(subEventId) => save(l.id, { subEventId })}
+                            className="-ml-2 w-36"
+                          />
+                        </TableCell>
+                      )}
                       <TableCell className="py-1">
                         <GhostSelect
                           ariaLabel="Paid by"
@@ -257,15 +286,15 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
             </TableBody>
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={2}>Total</TableCell>
-                <TableCell numeric>{money(summary.contractEstimate)}</TableCell>
-                <TableCell numeric>{money(sumKnown(lines.map((l) => l.actual)))}</TableCell>
+                <TableCell colSpan={showEvent ? 3 : 2}>Total</TableCell>
+                <TableCell numeric>{money(tableSummary.contractEstimate)}</TableCell>
+                <TableCell numeric>{money(sumKnown(shown.map((l) => l.actual)))}</TableCell>
                 <TableCell numeric>
-                  {summary.chargesKnown ? money(summary.serviceAndTax) : "—"}
+                  {tableSummary.chargesKnown ? money(tableSummary.serviceAndTax) : "—"}
                 </TableCell>
                 <TableCell numeric>
                   <Variance
-                    value={summary.contractActual ? summary.contractEstimate - summary.contractProjected : null}
+                    value={tableSummary.contractActual ? tableSummary.contractEstimate - tableSummary.contractProjected : null}
                   />
                 </TableCell>
                 <TableCell />
@@ -278,7 +307,7 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
 
       <section>
         <h2 className="pb-3 text-sm font-semibold">By category</h2>
-        <CategoryBars rows={byCat} max={maxCat} />
+        <CategoryBars rows={shownByCat} max={maxCat} />
       </section>
 
       <TableShell header={<h2 className="text-sm font-semibold">Payment schedule</h2>}>
@@ -334,16 +363,18 @@ export function BudgetTab({ wedding: w }: { wedding: Wedding }) {
 function BudgetGroup({
   category,
   totals,
+  showEvent,
   children,
 }: {
   category: string;
   totals?: CategoryBudget;
+  showEvent: boolean;
   children: ReactNode;
 }) {
   return (
     <>
       <TableSectionRow>
-        <TableCell colSpan={2} className="font-semibold">
+        <TableCell colSpan={showEvent ? 3 : 2} className="font-semibold">
           {category}
         </TableCell>
         <TableCell numeric className="pr-4 text-muted-foreground">

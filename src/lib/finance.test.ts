@@ -90,7 +90,7 @@ test("unpaid installments follow a new fee and paid ones stay put", () => {
 
 test("the planning line estimate follows a known fee and a blank fee leaves it", () => {
   const lines = [
-    { id: "p", category: "Planning" as const, estimate: 1000, actual: null, weddingId: "w", description: "", bookingId: null, paidBy: "couple" as const, serviceChargePct: null, taxPct: null },
+    { id: "p", category: "Planning" as const, estimate: 1000, actual: null, weddingId: "w", description: "", bookingId: null, subEventId: null, paidBy: "couple" as const, serviceChargePct: null, taxPct: null },
   ];
   expect(planningEstimateUpdate(lines, 7250)).toEqual({ id: "p", estimate: 7250 });
   expect(planningEstimateUpdate(lines, null)).toBeNull();
@@ -104,6 +104,7 @@ function line(partial: Partial<BudgetLine> & Pick<BudgetLine, "estimate" | "actu
     category: "Venue & catering",
     description: "Catering & bar",
     bookingId: null,
+    subEventId: null,
     paidBy: "couple",
     serviceChargePct: null,
     taxPct: null,

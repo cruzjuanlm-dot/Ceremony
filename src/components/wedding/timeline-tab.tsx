@@ -14,12 +14,13 @@ import {
 
 import { Chip, EmptyState } from "~/components/kit";
 import { useInsert, useRemove, useRows, useUpdate, useWeddingRows } from "~/data/hooks";
-import type { TimelineItem, Wedding } from "~/data/types";
+import type { SubEvent, TimelineItem, Wedding } from "~/data/types";
 import { dateLong, time12 } from "~/lib/format";
-import { SEGMENT_LABEL, VENDOR_CATEGORY_LABEL } from "~/lib/wedding";
+import { SEGMENT_LABEL, subEventIdForKind, subEventKindForSegment, VENDOR_CATEGORY_LABEL } from "~/lib/wedding";
 import { cellActionClass, cn } from "~/shared/libretto";
 
 import { CellInt, CellSelect, CellText, CellTime } from "./guests/cells";
+import { matchesSubEvent, SubEventFilter, SubEventSelect } from "./sub-events";
 import { AddTimelineItemButton } from "./timeline/add-item-dialog";
 import { DEFAULT_CEREMONY, SEGMENT_ORDER, endTime, findOverlaps, segmentRuns, sortByTime, templateItems } from "./timeline/run-of-show";
 import { toMin } from "./timeline/time";
@@ -28,10 +29,12 @@ const SEGMENT_OPTIONS = SEGMENT_ORDER.map((s) => ({ value: s, label: SEGMENT_LAB
 
 export function TimelineTab({ wedding }: { wedding: Wedding }) {
   const items = useWeddingRows("timeline", wedding.id);
+  const subEvents = useWeddingRows("subEvents", wedding.id);
   const insert = useInsert("timeline");
   const { mutate: update } = useUpdate("timeline");
   const { mutate: remove } = useRemove("timeline");
   const [seeding, setSeeding] = useState(false);
+  const [eventFilter, setEventFilter] = useState("all");
 
   const onPatch = useCallback((id: string, patch: Partial<TimelineItem>) => update({ id, patch }), [update]);
   const onRemove = useCallback((id: string) => remove(id), [remove]);
@@ -39,7 +42,12 @@ export function TimelineTab({ wedding }: { wedding: Wedding }) {
   async function startFromTemplate() {
     setSeeding(true);
     try {
-      for (const row of templateItems(wedding.id, wedding.ceremonyTime)) await insert.mutateAsync(row);
+      for (const row of templateItems(wedding.id, wedding.ceremonyTime)) {
+        await insert.mutateAsync({
+          ...row,
+          subEventId: subEventIdForKind(subEventKindForSegment(row.segment), subEvents),
+        });
+      }
     } finally {
       setSeeding(false);
     }
@@ -47,9 +55,12 @@ export function TimelineTab({ wedding }: { wedding: Wedding }) {
 
   const ceremony = wedding.ceremonyTime ?? null;
 
+  const visible = items.filter((it) => matchesSubEvent(it.subEventId, eventFilter));
+
   if (items.length === 0) {
     return (
       <div className="grid min-w-0 grid-cols-1 gap-6">
+        <SubEventFilter events={subEvents} value={eventFilter} onChange={setEventFilter} />
         <EmptyState
           title="No timeline yet"
           action={
@@ -57,22 +68,24 @@ export function TimelineTab({ wedding }: { wedding: Wedding }) {
               <Button onClick={startFromTemplate} disabled={seeding}>
                 Start from template
               </Button>
-              <AddTimelineItemButton wedding={wedding} />
+              <AddTimelineItemButton wedding={wedding} subEvents={subEvents} />
             </div>
           }
         >
           {`Built around the ${time12(ceremony ?? DEFAULT_CEREMONY)} ceremony.`}
         </EmptyState>
-        <CallSheet wedding={wedding} />
+        <CallSheet wedding={wedding} eventFilter={eventFilter} />
       </div>
     );
   }
 
-  const sorted = sortByTime(items);
-  const overlaps = findOverlaps(sorted);
+  const allSorted = sortByTime(items);
+  const overlaps = findOverlaps(allSorted);
+  const sorted = sortByTime(visible);
   const runs = segmentRuns(sorted);
-  const first = sorted[0];
-  const last = sorted.reduce((a, b) => (toMin(endTime(b)) > toMin(endTime(a)) ? b : a), sorted[0]);
+  const first = allSorted[0];
+  const last = allSorted.reduce((a, b) => (toMin(endTime(b)) > toMin(endTime(a)) ? b : a), allSorted[0]);
+  const showEvent = subEvents.length > 0;
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-6">
@@ -86,13 +99,15 @@ export function TimelineTab({ wedding }: { wedding: Wedding }) {
           </div>
         </div>
         <div className="no-print flex gap-2">
-          <AddTimelineItemButton wedding={wedding} />
+          <AddTimelineItemButton wedding={wedding} subEvents={subEvents} eventFilter={eventFilter} />
           <Button size="sm" variant="outline" onClick={() => window.print()}>
             <Printer />
             Print day sheet
           </Button>
         </div>
       </section>
+
+      <SubEventFilter events={subEvents} value={eventFilter} onChange={setEventFilter} />
 
       <div className="hidden print-show">
         <h1 className="text-xl font-semibold">{wedding.title} — Day sheet</h1>
@@ -101,7 +116,10 @@ export function TimelineTab({ wedding }: { wedding: Wedding }) {
         </p>
       </div>
 
-      <Table className="min-w-[1000px]">
+      {sorted.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nothing on the timeline for this sub-event.</p>
+      ) : (
+      <Table className="min-w-[1120px]">
         <TableHeader>
           <TableRow>
             <TableHead className="w-24">Time</TableHead>
@@ -114,6 +132,7 @@ export function TimelineTab({ wedding }: { wedding: Wedding }) {
             <TableHead className="w-36">Who</TableHead>
             <TableHead>Notes</TableHead>
             <TableHead className="w-36">Part</TableHead>
+            {showEvent && <TableHead className="w-36">Event</TableHead>}
             <TableHead className="w-10">
               <span className="sr-only">Actions</span>
             </TableHead>
@@ -121,11 +140,12 @@ export function TimelineTab({ wedding }: { wedding: Wedding }) {
         </TableHeader>
         <TableBody>
           {runs.map((run) => (
-            <SegmentRun key={run.items[0].id} label={SEGMENT_LABEL[run.segment]}>
+            <SegmentRun key={run.items[0].id} label={SEGMENT_LABEL[run.segment]} columns={showEvent ? 10 : 9}>
               {run.items.map((it) => (
                 <TimelineRow
                   key={it.id}
                   item={it}
+                  subEvents={subEvents}
                   isCeremony={it.time === ceremony && it.segment === "ceremony"}
                   overlapsWith={overlaps.get(it.id)}
                   onPatch={onPatch}
@@ -136,17 +156,18 @@ export function TimelineTab({ wedding }: { wedding: Wedding }) {
           ))}
         </TableBody>
       </Table>
+      )}
 
-      <CallSheet wedding={wedding} />
+      <CallSheet wedding={wedding} eventFilter={eventFilter} />
     </div>
   );
 }
 
-function SegmentRun({ label, children }: { label: string; children: React.ReactNode }) {
+function SegmentRun({ label, columns, children }: { label: string; columns: number; children: React.ReactNode }) {
   return (
     <>
       <TableSectionRow>
-        <td colSpan={9} className="px-2 text-sm font-semibold">
+        <td colSpan={columns} className="px-2 text-sm font-semibold">
           {label}
         </td>
       </TableSectionRow>
@@ -157,12 +178,14 @@ function SegmentRun({ label, children }: { label: string; children: React.ReactN
 
 const TimelineRow = memo(function TimelineRow({
   item: it,
+  subEvents,
   isCeremony,
   overlapsWith,
   onPatch,
   onRemove,
 }: {
   item: TimelineItem;
+  subEvents: SubEvent[];
   isCeremony: boolean;
   overlapsWith?: string[];
   onPatch: (id: string, patch: Partial<TimelineItem>) => void;
@@ -201,6 +224,16 @@ const TimelineRow = memo(function TimelineRow({
       <TableCell className="py-1">
         <CellSelect ariaLabel={`Part of the day for ${it.title}`} value={it.segment} options={SEGMENT_OPTIONS} onChange={(segment) => onPatch(it.id, { segment })} />
       </TableCell>
+      {subEvents.length > 0 && (
+        <TableCell className="py-1">
+          <SubEventSelect
+            events={subEvents}
+            value={it.subEventId}
+            ariaLabel={`Sub-event for ${it.title}`}
+            onChange={(subEventId) => onPatch(it.id, { subEventId })}
+          />
+        </TableCell>
+      )}
       <TableCell className="py-1">
         <Button
           variant="ghost"
@@ -217,8 +250,10 @@ const TimelineRow = memo(function TimelineRow({
 });
 
 /** Booked vendors in arrival order, with who to call. Arrival is editable here. */
-function CallSheet({ wedding }: { wedding: Wedding }) {
-  const bookings = useWeddingRows("bookings", wedding.id).filter((b) => b.stage === "booked");
+function CallSheet({ wedding, eventFilter }: { wedding: Wedding; eventFilter: string }) {
+  const bookings = useWeddingRows("bookings", wedding.id).filter(
+    (b) => b.stage === "booked" && matchesSubEvent(b.subEventId, eventFilter),
+  );
   const vendors = useRows("vendors");
   const { mutate: update } = useUpdate("bookings");
 

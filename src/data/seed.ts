@@ -18,6 +18,8 @@ import type {
   RoomBlock,
   ServiceLevel,
   ClientStatus,
+  SubEvent,
+  SubEventKind,
   Task,
   TimelineItem,
   Vendor,
@@ -25,7 +27,7 @@ import type {
   Wedding,
 } from "./types";
 import { plannerFee, splitAmount, splitContract, suggestedTip } from "~/lib/finance";
-import { jurisdictionOf } from "~/lib/wedding";
+import { jurisdictionOf, subEventKindForBudgetLine, subEventKindForSegment, subEventKindForVendor } from "~/lib/wedding";
 
 /**
  * Demo seed. Every date is an OFFSET from "today" (the moment the dataset is first created),
@@ -370,6 +372,7 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
   const t: Dataset["tables"] = {
     clients: [],
     weddings: [],
+    subEvents: [],
     vendors,
     bookings: [],
     budgetLines: [],
@@ -414,6 +417,53 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
 
     const day = (n: number) => addDays(wDate, -n);
     const isPast = (d: Date) => d.getTime() < today.getTime();
+    const ceremonyMin = hhmmToMinutes(w.ceremonyTime ?? "17:00");
+    // Sub-events follow what this seed already describes. A day-of timeline
+    // (inside ~6 months) names cocktail, reception, and a send-off. Earlier
+    // weddings have a ceremony and a venue, and blank times where the run of
+    // show does not exist yet. Welcome, rehearsal, and brunch are not seeded.
+    const dayOf = daysOut < 200;
+    const atOffset = (offset: number) => minutesToHHMM(ceremonyMin + offset);
+    const venueName = venue?.name ?? "";
+    const subEventRows: SubEvent[] = [
+      {
+        id: id("sub"),
+        weddingId: w.id,
+        kind: "ceremony",
+        date: w.date,
+        time: w.ceremonyTime,
+        location: w.ceremonyType === "catholic" ? "Parish" : venueName || "Ceremony site",
+      },
+      {
+        id: id("sub"),
+        weddingId: w.id,
+        kind: "cocktail",
+        date: w.date,
+        time: dayOf ? atOffset(45) : null,
+        location: dayOf ? "Terrace" : venueName,
+      },
+      {
+        id: id("sub"),
+        weddingId: w.id,
+        kind: "reception",
+        date: w.date,
+        time: dayOf ? atOffset(105) : null,
+        location: dayOf ? "Ballroom" : venueName,
+      },
+    ];
+    if (dayOf) {
+      subEventRows.push({
+        id: id("sub"),
+        weddingId: w.id,
+        kind: "after_party",
+        date: w.date,
+        time: atOffset(330),
+        location: "Front drive",
+      });
+    }
+    t.subEvents.push(...subEventRows);
+    const kindId = new Map<SubEventKind, string>(subEventRows.map((e) => [e.kind, e.id]));
+    const linked = (kind: SubEventKind | null) => (kind ? (kindId.get(kind) ?? null) : null);
 
     /* bookings + budget + payments */
     const bookingByCat = new Map<VendorCategory, Booking>();
@@ -431,13 +481,13 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
         stage,
         amount: null,
         arrivalTime: null,
+        subEventId: linked(subEventKindForVendor(cat)),
         notes: "",
       };
       t.bookings.push(b);
       bookingByCat.set(cat, b);
     }
 
-    const ceremonyMin = hhmmToMinutes(w.ceremonyTime ?? "17:00");
     for (const group of BUDGET_SPLIT) {
       for (const [desc, share] of group.lines) {
         // DIY couples rarely hire a full planner — their line is a day-of coordinator.
@@ -483,6 +533,7 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
           estimate,
           actual,
           bookingId: booking?.id ?? null,
+          subEventId: linked(subEventKindForBudgetLine({ category: group.category, description: desc })),
           paidBy: desc === "Catering & bar" && spec.wedding.ceremonyType === "catholic" ? "family" : "couple",
           serviceChargePct: charge?.serviceChargePct ?? null,
           taxPct: charge?.taxPct ?? null,
@@ -544,6 +595,7 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
         estimate: tip,
         actual: handed ? tip : null,
         bookingId: null,
+        subEventId: null,
         paidBy: "couple",
         serviceChargePct: null,
         taxPct: null,
@@ -613,6 +665,7 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
           durationMin: it.dur,
           title: it.title,
           segment: it.segment,
+          subEventId: linked(subEventKindForSegment(it.segment)),
           location: it.location,
           owner: it.owner,
           notes: "",

@@ -85,6 +85,30 @@ export interface Wedding {
   createdAt: string;
 }
 
+/**
+ * One part of the wedding weekend. The wedding row stays the ceremony day;
+ * these rows are welcome, rehearsal, cocktail, reception, and the rest.
+ * A missing date or time stays null. Blank is not zero.
+ */
+export type SubEventKind =
+  | "welcome"
+  | "rehearsal"
+  | "ceremony"
+  | "cocktail"
+  | "reception"
+  | "after_party"
+  | "brunch";
+
+export interface SubEvent {
+  id: string;
+  weddingId: string;
+  kind: SubEventKind;
+  date: string | null;
+  /** "HH:MM". Null until someone sets a start. */
+  time: string | null;
+  location: string;
+}
+
 export type VendorCategory =
   | "venue"
   | "catering"
@@ -134,6 +158,8 @@ export interface Booking {
   amount: number | null;
   /** Day-of arrival, "HH:MM". Feeds the vendor call sheet. */
   arrivalTime: string | null;
+  /** Which part of the weekend this vendor is booked for. Null means the whole wedding. */
+  subEventId: string | null;
   notes: string;
 }
 
@@ -163,6 +189,8 @@ export interface BudgetLine {
   estimate: number | null;
   actual: number | null;
   bookingId: string | null;
+  /** Which part of the weekend this line belongs to. Null means the whole wedding. */
+  subEventId: string | null;
   /** Who's paying — common for parents/padrinos to cover specific items. */
   paidBy: "couple" | "family" | "other";
   /**
@@ -244,6 +272,8 @@ export interface TimelineItem {
   durationMin: number;
   title: string;
   segment: TimelineSegment;
+  /** Which sub-event this cue belongs to. Null means it is not tied to one. */
+  subEventId: string | null;
   location: string;
   /** Who runs it — a vendor booking or a free-text person ("Maid of honor"). */
   owner: string;
@@ -348,6 +378,7 @@ export interface DocumentRecord {
 export interface Tables {
   clients: Client;
   weddings: Wedding;
+  subEvents: SubEvent;
   vendors: Vendor;
   bookings: Booking;
   budgetLines: BudgetLine;

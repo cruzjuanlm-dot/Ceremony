@@ -21,6 +21,7 @@ export function NewClientButton({ onCreated }: { onCreated?: (id: string) => voi
   const ws = useWorkspace();
   const insertClient = useInsert("clients");
   const insertWedding = useInsert("weddings");
+  const insertSubEvents = useInsertMany("subEvents");
   const insertLines = useInsertMany("budgetLines");
   const insertTasks = useInsertMany("tasks");
   const insertTimeline = useInsertMany("timeline");
@@ -49,6 +50,7 @@ export function NewClientButton({ onCreated }: { onCreated?: (id: string) => voi
   const pending =
     insertClient.isPending ||
     insertWedding.isPending ||
+    insertSubEvents.isPending ||
     insertLines.isPending ||
     insertTasks.isPending ||
     insertTimeline.isPending ||
@@ -94,6 +96,7 @@ export function NewClientButton({ onCreated }: { onCreated?: (id: string) => voi
         createdAt: today,
       });
       await writeStarter(w, ws.plan, c, {
+        insertSubEvents: (rows) => insertSubEvents.mutateAsync(rows),
         insertBudgetLines: (rows) => insertLines.mutateAsync(rows),
         insertTasks: (rows) => insertTasks.mutateAsync(rows),
         insertTimeline: (rows) => insertTimeline.mutateAsync(rows),

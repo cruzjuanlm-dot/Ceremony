@@ -19,14 +19,14 @@ Audited against the owner navigation sketch and `docs/WEDDING_INDUSTRY_RESEARCH.
 | Planner fee models (Pro) | Flat, percent of the budget target, hybrid, and hourly. `plannerFee()` in `src/lib/finance.ts` computes the number. Unpaid installments and the Planning line follow it. Blank inputs stay blank. |
 | New wedding plan | Creating a wedding seeds estimates-only budget lines (research §6 categories), a months-out checklist, and a ceremony-relative timeline. |
 | Service charge and tax | Venue and catering lines carry a service-charge percent and a sales-tax percent. `serviceChargeAndTax()` in `src/lib/finance.ts` turns those into dollars beside the contract. The amount is not a tip. Blank percents stay blank. Budget totals include the charge. |
+| Sub-events | Welcome party, rehearsal, ceremony, cocktail hour, reception, after-party, and brunch. Each has a date, a time, and a location. A budget line, a vendor booking, or a timeline cue can point at one. Budget, vendors, and timeline filter by it. The wedding date is still the ceremony day. |
 
 ## Next, in order
 
-1. **Sub-events.** Welcome party, rehearsal, ceremony, cocktail, reception, after-party, brunch: each with a venue, a guest subset, and its own rain plan. Today there is one date, one rain note, and one guest list.
-2. **Named contributors.** `paidBy` is couple / family / other. Parents and padrinos need names, tied to the lines they cover.
-3. **Per-vendor timeline.** The call sheet lists arrivals. A vendor still cannot open a timeline that shows only their cues.
-4. **Planner templates.** The timeline has “Start from template.” Checklist, timeline, and vendor rosters are not reusable across weddings. A new wedding uses one built-in starter, not a saved template.
-5. **Guest RSVP page.** The list exists. There is no couple-facing EN/ES RSVP link. Households are a text field, not their own record (no mailing address).
+1. **Named contributors.** `paidBy` is couple / family / other. Parents and padrinos need names, tied to the lines they cover.
+2. **Per-vendor timeline.** The call sheet lists arrivals. A vendor still cannot open a timeline that shows only their cues.
+3. **Planner templates.** The timeline has “Start from template.” Checklist, timeline, and vendor rosters are not reusable across weddings. A new wedding uses one built-in starter, not a saved template.
+4. **Guest RSVP page.** The list exists. There is no couple-facing EN/ES RSVP link. Households are a text field, not their own record (no mailing address).
 
 ## Legal tasks still open
 
@@ -35,6 +35,7 @@ A new wedding in Puerto Rico, Florida, or with a Catholic ceremony gets checklis
 ## Explicitly later
 
 - **Design studio.** Placeholder on purpose. List seating on the wedding is the v1. Drag-and-drop floor plans stay deferred.
+- **Per sub-event guest list and rain plan.** The guest list and the rain note stay on the wedding. Sub-events carry date, time, and location.
 - **Gmail / Outlook.** The inbox is a manual log. Two-way sync is out of demo scope.
 - **Client portal, team seats, “hire a planner” hand-off, Español UI.** Each needs accounts or a second language pass. The portal is free couple logins in the pricing notes, not a demo screen.
 - **Website, registry, vendor marketplace, e-sign.** Deferred in the research. Documents stay links.

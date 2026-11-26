@@ -95,6 +95,7 @@ export function TipEnvelopes({ wedding: w }: { wedding: Wedding }) {
         estimate,
         actual,
         bookingId: null,
+        subEventId: row.booking.subEventId,
         paidBy: "couple",
         serviceChargePct: null,
         taxPct: null,
