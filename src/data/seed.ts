@@ -385,6 +385,7 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
     appointments: [],
     emails: [],
     documents: [],
+    portalShares: [],
   };
 
   for (const spec of specs) {

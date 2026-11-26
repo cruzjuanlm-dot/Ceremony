@@ -4,6 +4,7 @@ import { Button } from "@libretto-ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@libretto-ui/tabs";
 
 import { EmptyState } from "~/components/kit";
+import { PortalShareCard } from "~/components/portal/share-card";
 import { BudgetTab } from "~/components/wedding/budget-tab";
 import { ChecklistTab } from "~/components/wedding/checklist-tab";
 import { DocumentsTab } from "~/components/wedding/documents-tab";
@@ -72,6 +73,7 @@ function WeddingPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <WeddingHeader wedding={wedding} />
+      <PortalShareCard weddingId={wedding.id} plan={ws.plan} />
       <Tabs value={tab} onValueChange={setTab}>
         <div className="-mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
           <TabsList className="w-max justify-start">
