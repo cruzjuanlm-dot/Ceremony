@@ -9,6 +9,7 @@ import type {
   Dataset,
   DocumentRecord,
   Email,
+  Gratuity,
   Guest,
   MealChoice,
   Payment,
@@ -22,6 +23,7 @@ import type {
   VendorCategory,
   Wedding,
 } from "./types";
+import { suggestedTip } from "~/lib/finance";
 
 /**
  * Demo seed. Every date is an OFFSET from "today" (the moment the dataset is first created),
@@ -201,8 +203,11 @@ const DIY_VENDORS: VendorSeed[] = [
 
 /**
  * Typical share of a US wedding budget by line (blend of WeddingWire / Joy / WalletHub — see
- * docs/WEDDING_INDUSTRY_RESEARCH.md). Sums to 1.0 of the TARGET; real couples also keep a
+ * docs/WEDDING_INDUSTRY_RESEARCH.md). These shares sum to 0.97 of the target (gratuities
+ * are envelopes, below); real couples also keep a
  * 5–10% unassigned buffer, which is why seeded projections land near, not on, the target.
+ * Gratuities are not in this split: once a vendor is booked, an envelope is seeded from
+ * suggestedTip() and written as its own Gratuities budget line.
  */
 const BUDGET_SPLIT: { category: BudgetCategory; lines: [string, number][] }[] = [
   { category: "Venue & catering", lines: [["Venue rental", 0.3], ["Catering & bar", 0.17]] },
@@ -212,7 +217,6 @@ const BUDGET_SPLIT: { category: BudgetCategory; lines: [string, number][] }[] = 
   { category: "Attire & beauty", lines: [["Wedding attire", 0.05], ["Hair & makeup", 0.02]] },
   { category: "Planning", lines: [["Planner / coordinator", 0.06]] },
   { category: "Rentals & lighting", lines: [["Rentals & lighting", 0.03]] },
-  { category: "Gratuities", lines: [["Vendor tips", 0.03]] },
   { category: "Stationery", lines: [["Save-the-dates & invitations", 0.02]] },
   { category: "Rings", lines: [["Wedding bands", 0.02]] },
   { category: "Cake & desserts", lines: [["Wedding cake", 0.01]] },
@@ -350,6 +354,7 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
     vendors,
     bookings: [],
     budgetLines: [],
+    gratuities: [],
     payments: [],
     tasks: [],
     timeline: [],
@@ -482,6 +487,37 @@ function build(plan: Plan, specs: WeddingSpec[], vendorSeeds: VendorSeed[], toda
           method: isPast(due) && !overdue ? (rand() > 0.5 ? "ACH" : "Check") : null,
         });
       }
+    }
+
+    // Tip envelopes for booked contracts. Past weddings were handed over; upcoming ones are planned.
+    for (const b of bookingByCat.values()) {
+      if (b.stage !== "booked" || b.amount == null) continue;
+      const vendor = vendors.find((v) => v.id === b.vendorId);
+      if (!vendor) continue;
+      const tip = suggestedTip(b.amount, vendor.category);
+      if (tip == null) continue;
+      const handed = daysOut < 0;
+      const lineId = id("bud");
+      t.budgetLines.push({
+        id: lineId,
+        weddingId: w.id,
+        category: "Gratuities",
+        description: `Tip · ${vendor.name}`,
+        estimate: tip,
+        actual: handed ? tip : null,
+        bookingId: null,
+        paidBy: "couple",
+      });
+      const envelope: Gratuity = {
+        id: id("tip"),
+        weddingId: w.id,
+        bookingId: b.id,
+        budgetLineId: lineId,
+        // Catering gratuity is usually on the bill, not a cash envelope.
+        cash: vendor.category !== "catering",
+        handedBy: plan === "diy" ? "couple" : "planner",
+      };
+      t.gratuities.push(envelope);
     }
 
     if (plan === "pro" && spec.client) {

@@ -2,7 +2,7 @@ import type { BudgetCategory, VendorCategory } from "~/data/types";
 
 /**
  * Non-component helpers for the wedding page. Kept out of the .tsx files so those export
- * only components (React Fast Refresh). Money math (lineVariance, suggestedTips) lives in
+ * only components (React Fast Refresh). Money math (lineVariance, suggestedTip) lives in
  * lib/finance.ts, not here.
  */
 

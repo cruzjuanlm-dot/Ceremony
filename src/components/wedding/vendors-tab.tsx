@@ -13,20 +13,19 @@ import {
 import { Input } from "@libretto-ui/input";
 import { Label } from "@libretto-ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@libretto-ui/select";
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow, TableShell } from "@libretto-ui/table";
 
 import { EmptyState } from "~/components/kit";
 import { StageChip } from "~/components/status";
 import { useInsert, useRows, useUpdate, useWeddingRows } from "~/data/hooks";
 import type { Booking, BookingStage, BudgetLine, Payment, Vendor, Wedding } from "~/data/types";
 import { bookingBalance } from "~/lib/finance";
-import { money, pct, time12 } from "~/lib/format";
+import { money, time12 } from "~/lib/format";
 import { STAGES, STAGE_LABEL, VENDOR_CATEGORY_LABEL } from "~/lib/wedding";
 import { cn } from "~/shared/libretto";
 
 import { CellAmount, CellText, GhostSelect } from "./fields";
-import { suggestedTips } from "~/lib/finance";
 import { parseAmount, VENDOR_BUDGET_CATEGORY } from "./wedding-helpers";
+import { TipEnvelopes } from "./vendors/tip-envelopes";
 
 const BOARD: BookingStage[] = ["researching", "contacted", "quoted", "booked"];
 const STAGE_OPTIONS = STAGES.map((s) => ({ value: s, label: STAGE_LABEL[s] }));
@@ -40,7 +39,6 @@ export function VendorsTab({ wedding: w }: { wedding: Wedding }) {
 
   const vendorOf = (b: Booking) => vendors.find((v) => v.id === b.vendorId);
   const declined = bookings.filter((b) => b.stage === "declined");
-  const tips = suggestedTips(bookings, vendors);
 
   return (
     <div className="grid grid-cols-1 gap-8">
@@ -105,45 +103,7 @@ export function VendorsTab({ wedding: w }: { wedding: Wedding }) {
         </section>
       )}
 
-      {tips.rows.length > 0 && (
-        <TableShell
-          header={
-            <>
-              <h2 className="text-sm font-semibold">Tip envelopes</h2>
-              <span className="text-xs text-muted-foreground">Week of</span>
-            </>
-          }
-        >
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Vendor</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead numeric>Contract</TableHead>
-                <TableHead numeric>Suggested</TableHead>
-                <TableHead numeric>Tip</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tips.rows.map((r) => (
-                <TableRow key={r.booking.id}>
-                  <TableCell className="font-medium">{r.vendor.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{VENDOR_CATEGORY_LABEL[r.vendor.category]}</TableCell>
-                  <TableCell numeric>{money(r.booking.amount)}</TableCell>
-                  <TableCell numeric className="text-muted-foreground">{pct(r.pct)}</TableCell>
-                  <TableCell numeric>{money(r.tip)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableCell colSpan={4}>Total</TableCell>
-                <TableCell numeric>{money(tips.total)}</TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
-        </TableShell>
-      )}
+      <TipEnvelopes wedding={w} />
     </div>
   );
 }

@@ -13,7 +13,7 @@ import type { Dataset, Plan, TableName, Tables, Workspace } from "./types";
  * in-memory copy rather than crashing.
  */
 
-const VERSION = 4;
+const VERSION = 5;
 const PLAN_KEY = "ceremony-demo:plan";
 const dataKey = (plan: Plan) => `ceremony-demo:v${VERSION}:${plan}`;
 
@@ -93,7 +93,8 @@ export function newId(prefix = "id"): string {
 /* ---------- synchronous reads (used as react-query initialData — no loading flash) ------- */
 
 export function listSync<K extends TableName>(table: K): Tables[K][] {
-  return dataset().tables[table] as Tables[K][];
+  const rows = dataset().tables[table];
+  return Array.isArray(rows) ? rows : [];
 }
 
 export function workspaceSync(): Workspace {

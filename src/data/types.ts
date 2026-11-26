@@ -150,6 +150,25 @@ export interface BudgetLine {
   paidBy: "couple" | "family" | "other";
 }
 
+/** Who physically hands over a tip envelope. */
+export type TipHandover = "planner" | "couple" | "family";
+
+/**
+ * One vendor's tip envelope. The dollars live on a Gratuities budget line
+ * (`budgetLineId`) so estimate and actual stay in the one money model.
+ * This row is the envelope itself: cash vs. added to the bill, and who hands it over.
+ */
+export interface Gratuity {
+  id: string;
+  weddingId: string;
+  bookingId: string;
+  /** Null until an amount is set — a blank envelope is not a $0 budget line. */
+  budgetLineId: string | null;
+  /** True: cash in an envelope. False: added to the vendor's bill. */
+  cash: boolean;
+  handedBy: TipHandover;
+}
+
 export type PaymentDirection = "incoming" | "outgoing";
 
 /**
@@ -305,6 +324,7 @@ export interface Tables {
   vendors: Vendor;
   bookings: Booking;
   budgetLines: BudgetLine;
+  gratuities: Gratuity;
   payments: Payment;
   tasks: Task;
   timeline: TimelineItem;
